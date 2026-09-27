@@ -23,6 +23,9 @@
       "src/**",
       "package.json"
     ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns"
@@ -48,5 +51,8 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "electron-liquid-glass": "^1.1.1"
   }
 }

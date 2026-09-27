@@ -18,7 +18,7 @@ Requires macOS and Node + npm for development. Electron supplies the Chromium en
 - Top left: the native traffic lights on a small glass capsule.
 - Tabs exist but have no UI — keyboard only. `⌘T` opens a tab focused into the pill.
 - Pages render in sandboxed `<webview>`s; links that want a new window open as tabs; downloads go to `~/Downloads`.
-- The glass follows the system appearance (light/dark).
+- On macOS 26+ the pill is real Liquid Glass (`NSGlassEffectView` via `electron-liquid-glass`, in a transparent child window so the DOM content stays crisp); older macOS falls back to CSS glass. The lights capsule is DOM so the native buttons stay sharp.
 
 ## Shortcuts
 

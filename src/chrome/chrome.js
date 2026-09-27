@@ -1,15 +1,10 @@
 const webviewsEl = document.getElementById('webviews');
-const pill = document.getElementById('url-pill');
-const favicon = document.getElementById('favicon');
-const tabTitle = document.getElementById('tab-title');
-const input = document.getElementById('url-input');
-const progress = document.getElementById('progress');
 
 const START_URL = 'toast://newtab/';
 const tabs = [];
 let activeId = null;
 let seq = 0;
-let wasLoading = false;
+let editing = false;
 
 function activeTab() {
   return tabs.find((t) => t.id === activeId) || null;
@@ -25,46 +20,34 @@ function normalizeInput(value) {
   return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
 }
 
-function renderPill() {
+// The pill renders in its own glass window; we broadcast what to show.
+function broadcastPill() {
   const tab = activeTab();
-  if (!pill.classList.contains('editing')) {
-    tabTitle.textContent = tab ? tab.title || 'New Tab' : 'New Tab';
-  }
-  if (tab && tab.favicon) {
-    favicon.src = tab.favicon;
-    favicon.style.display = '';
-  } else {
-    favicon.removeAttribute('src');
-    favicon.style.display = 'none';
-  }
+  toast.send('toast:pill-state', {
+    title: tab ? tab.title || 'New Tab' : 'New Tab',
+    favicon: (tab && tab.favicon) || '',
+    url: tab && tab.url && !tab.url.startsWith(START_URL) ? tab.url : '',
+    loading: !!(tab && tab.loading),
+    editing,
+  });
+}
 
-  const loading = !!(tab && tab.loading);
-  if (loading && !wasLoading) {
-    progress.style.opacity = '1';
-    progress.style.transition = 'none';
-    progress.style.width = '0';
-    requestAnimationFrame(() => {
-      progress.style.transition = 'width 6s cubic-bezier(0.1,0.5,0.2,1)';
-      progress.style.width = '82%';
-    });
-  } else if (!loading && wasLoading) {
-    progress.style.transition = 'width 0.18s ease';
-    progress.style.width = '100%';
-    setTimeout(() => {
-      progress.style.transition = 'opacity 0.35s ease';
-      progress.style.opacity = '0';
-      setTimeout(() => {
-        progress.style.transition = 'none';
-        progress.style.width = '0';
-      }, 380);
-    }, 200);
-  }
-  wasLoading = loading;
+function enterEditMode() {
+  if (editing) return;
+  editing = true;
+  broadcastPill();
+  toast.send('toast:pill-focus', true);
+}
+
+function exitEditMode() {
+  if (!editing) return;
+  editing = false;
+  broadcastPill();
 }
 
 function attachViewListeners(tab) {
   const wv = tab.view;
-  const sync = () => renderPill();
+  const sync = () => broadcastPill();
 
   wv.addEventListener('page-title-updated', (e) => {
     tab.title = e.title;
@@ -80,7 +63,7 @@ function attachViewListeners(tab) {
   };
   wv.addEventListener('did-navigate', (e) => {
     urlChanged(e.url);
-    if (tab.id === activeId && e.url.startsWith(START_URL)) enterEditMode();
+    if (tab.id === activeId && tab.autoEdit && e.url.startsWith(START_URL)) enterEditMode();
   });
   wv.addEventListener('did-navigate-in-page', (e) => urlChanged(e.url));
   wv.addEventListener('did-redirect-navigation', (e) => urlChanged(e.url));
@@ -97,7 +80,7 @@ function attachViewListeners(tab) {
   });
 }
 
-function createTab(url, { activate = true } = {}) {
+function createTab(url, { activate = true, autoEdit = true } = {}) {
   const wv = document.createElement('webview');
   wv.className = 'page-view';
   wv.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
@@ -109,6 +92,7 @@ function createTab(url, { activate = true } = {}) {
     title: 'New Tab',
     favicon: null,
     loading: false,
+    autoEdit,
   };
   attachViewListeners(tab);
   tabs.push(tab);
@@ -124,8 +108,8 @@ function activateTab(id) {
   activeId = id;
   for (const t of tabs) t.view.classList.toggle('inactive', t.id !== id);
   exitEditMode();
-  renderPill();
-  if (!tab.url || tab.url.startsWith(START_URL)) {
+  broadcastPill();
+  if (tab.autoEdit && (!tab.url || tab.url.startsWith(START_URL))) {
     enterEditMode();
   } else {
     tab.view.focus();
@@ -145,7 +129,7 @@ function closeTab(id) {
     const neighbor = tabs[idx] || tabs[idx - 1];
     activateTab(neighbor.id);
   }
-  renderPill();
+  broadcastPill();
 }
 
 function stepTab(dir) {
@@ -154,51 +138,6 @@ function stepTab(dir) {
   const next = tabs[(idx + dir + tabs.length) % tabs.length];
   activateTab(next.id);
 }
-
-function enterEditMode() {
-  const tab = activeTab();
-  pill.classList.add('editing');
-  input.hidden = false;
-  input.value = tab && tab.url && !tab.url.startsWith(START_URL) ? tab.url : '';
-  input.focus();
-  setTimeout(() => {
-    if (document.activeElement === input) input.select();
-  }, 0);
-}
-
-function exitEditMode() {
-  pill.classList.remove('editing');
-  input.hidden = true;
-  input.blur();
-}
-
-pill.addEventListener('click', (e) => {
-  if (!pill.classList.contains('editing')) enterEditMode();
-});
-
-input.addEventListener('keydown', (e) => {
-  const tab = activeTab();
-  if (e.key === 'Enter') {
-    const url = normalizeInput(input.value);
-    exitEditMode();
-    renderPill();
-    if (url && tab) {
-      tab.view.loadURL(url);
-      tab.view.focus();
-    }
-  } else if (e.key === 'Escape') {
-    exitEditMode();
-    renderPill();
-    if (tab) tab.view.focus();
-  }
-});
-
-input.addEventListener('blur', () => {
-  if (pill.classList.contains('editing')) {
-    exitEditMode();
-    renderPill();
-  }
-});
 
 toast.on('toast:event', (name, arg) => {
   const tab = activeTab();
@@ -246,4 +185,35 @@ toast.on('toast:event', (name, arg) => {
   }
 });
 
-createTab(START_URL);
+// Intents coming back from the pill window (click-to-edit, Enter, Esc, blur)
+toast.on('toast:pill-intent', (intent) => {
+  const tab = activeTab();
+  switch (intent.type) {
+    case 'edit':
+      enterEditMode();
+      break;
+    case 'navigate': {
+      exitEditMode();
+      const url = normalizeInput(intent.url || '');
+      if (url && tab) {
+        tab.view.loadURL(url);
+        tab.view.focus();
+      }
+      break;
+    }
+    case 'cancel':
+      exitEditMode();
+      if (tab) tab.view.focus();
+      break;
+    case 'blur':
+      // pill window lost focus to the page — leave edit mode quietly
+      if (editing) exitEditMode();
+      break;
+  }
+});
+
+// the launch tab opens on the new-tab page without grabbing edit focus
+// (editing moves key-focus to the pill window, which would dim the traffic
+// lights at startup)
+createTab(START_URL, { autoEdit: false });
+broadcastPill();

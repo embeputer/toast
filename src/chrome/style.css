@@ -1,75 +1,63 @@
+:root {
+  color-scheme: light dark;
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-:root {
-  --glass-bg: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.55),
-    rgba(255, 255, 255, 0.32)
-  );
-  --glass-bg-focus: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.55);
-  --glass-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.04),
-    0 8px 28px rgba(0, 0, 0, 0.14),
-    0 1px 4px rgba(0, 0, 0, 0.08);
-  --text: #26231f;
-  --text-dim: #6f6a63;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --glass-bg: linear-gradient(
-      180deg,
-      rgba(58, 57, 56, 0.62),
-      rgba(38, 37, 36, 0.42)
-    );
-    --glass-bg-focus: rgba(44, 43, 42, 0.88);
-    --glass-border: rgba(255, 255, 255, 0.18);
-    --glass-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-      0 8px 28px rgba(0, 0, 0, 0.45),
-      0 1px 4px rgba(0, 0, 0, 0.3);
-    --text: #eceae7;
-    --text-dim: #9b968e;
-  }
-}
-
 html,
 body {
+  width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-  color: var(--text);
   background: transparent;
-  user-select: none;
 }
-
-/* ---------- pages fill the whole window ---------- */
 
 #webviews {
   position: fixed;
   inset: 0;
 }
 
-#webviews webview {
+webview.page-view {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-#webviews webview.inactive {
+webview.page-view.inactive {
   display: none;
 }
 
-/* ---------- window drag strip (invisible, top edge) ---------- */
+/* glass capsule behind the traffic lights — DOM so it renders UNDER the
+   native buttons (lights at x16–73 / y18–31, measured) */
+#lights-pill {
+  position: fixed;
+  left: 8px;
+  top: 10px;
+  width: 73px;
+  height: 29px;
+  border-radius: 14.5px;
+  background: rgba(246, 246, 248, 0.55);
+  backdrop-filter: blur(22px) saturate(1.7);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7);
+  border: 0.5px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  z-index: 5;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  #lights-pill {
+    background: rgba(30, 30, 34, 0.52);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
 
+/* top strip for window dragging (titlebar area above page) */
 #drag-strip {
   position: fixed;
   top: 0;
@@ -77,130 +65,6 @@ body {
   right: 0;
   height: 46px;
   -webkit-app-region: drag;
+  app-region: drag;
   z-index: 10;
-}
-
-/* ---------- shared liquid glass ---------- */
-
-.glass,
-#lights-pill,
-#url-pill {
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(22px) saturate(1.7);
-  backdrop-filter: blur(22px) saturate(1.7);
-  border: 0.5px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}
-
-/* ---------- traffic-light capsule ---------- */
-
-#lights-pill {
-  position: fixed;
-  left: 6px;
-  top: 10px;
-  width: 60px;
-  height: 34px;
-  border-radius: 17px;
-  z-index: 5;
-  pointer-events: none;
-}
-
-/* ---------- floating address pill ---------- */
-
-#url-pill {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 140px;
-  max-width: min(460px, 52vw);
-  height: 30px;
-  padding: 0 14px;
-  border-radius: 15px;
-  overflow: hidden;
-  z-index: 20;
-  cursor: default;
-  -webkit-app-region: no-drag;
-  transition: box-shadow 0.15s ease, background 0.15s ease;
-}
-
-#url-pill.editing {
-  background: var(--glass-bg-focus);
-  box-shadow:
-    var(--glass-shadow),
-    0 0 0 3.5px rgba(10, 132, 255, 0.35);
-}
-
-#progress {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  background: rgba(10, 132, 255, 0.16);
-  pointer-events: none;
-}
-
-#tab-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  position: relative;
-}
-
-#url-pill.editing #tab-label {
-  display: none;
-}
-
-#favicon {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  border-radius: 3px;
-  object-fit: contain;
-}
-
-#favicon:not([src]),
-#favicon[src=''] {
-  display: none;
-}
-
-#tab-title {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#url-input {
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  position: relative;
-}
-
-#url-input[hidden] {
-  display: none;
-}
-
-#url-pill.editing #url-input {
-  display: block;
-}
-
-#url-pill.editing {
-  width: min(520px, 60vw);
-}
-
-#url-input::placeholder {
-  color: var(--text-dim);
 }

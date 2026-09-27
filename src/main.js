@@ -13,6 +13,20 @@ const fs = require('fs');
 
 const START_URL = 'toast://newtab/';
 
+let liquidGlass = null;
+try {
+  liquidGlass = require('electron-liquid-glass');
+} catch (_) {
+  /* native module unavailable — CSS glass fallback handles it */
+}
+function glassSupported() {
+  try {
+    return !!(liquidGlass && liquidGlass.isGlassSupported());
+  } catch (_) {
+    return false;
+  }
+}
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'toast',
@@ -20,10 +34,21 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// host BrowserWindow -> { lights, pill } child chrome windows
+const chromeByHost = new Map();
+// child BrowserWindow -> host BrowserWindow
+const hostByChild = new Map();
+
 function hostWindow(guest) {
   // a <webview> guest's embedder is the window's own webContents
   const host = guest.hostWebContents;
   return host ? BrowserWindow.fromWebContents(host) : null;
+}
+
+// Resolve a window-like thing to its host browser window (children -> parent).
+function asHost(win) {
+  if (!win) return null;
+  return hostByChild.get(win.id) || win;
 }
 
 function buildContextMenu(win, wc, params) {
@@ -65,6 +90,108 @@ function buildContextMenu(win, wc, params) {
   Menu.buildFromTemplate(items).popup({ window: win });
 }
 
+// ---- floating glass chrome (real NSGlassEffectView on macOS 26+) ----
+//
+// The capsule behind the traffic lights and the address pill are each a small
+// transparent child window filled edge-to-edge with a native glass view.
+// Child windows follow the parent when it moves; we re-derive their position
+// on resize/fullscreen changes. DOM inside each child renders the actual
+// content (lights capsule is empty; pill shows favicon/title/input) on top
+// of the glass.
+
+const PILL_TOP = 12;
+
+function childOpts(win, w, h) {
+  return {
+    parent: win,
+    width: w,
+    height: h,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    closable: false,
+    show: false,
+    skipTaskbar: true,
+    alwaysOnTop: false,
+    acceptFirstMouse: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  };
+}
+
+function positionPill(host, w, h) {
+  const { pill } = chromeByHost.get(host.id) || {};
+  if (!pill || pill.isDestroyed()) return;
+  const b = host.getBounds();
+  if (!w || !h) ({ width: w, height: h } = pill.getBounds());
+  const top = host.isFullScreen() ? 8 : PILL_TOP;
+  pill.setBounds({
+    x: Math.round(b.x + (b.width - w) / 2),
+    y: b.y + top,
+    width: Math.round(w),
+    height: Math.round(h),
+  });
+}
+
+function applyGlass(win, radius) {
+  if (!glassSupported()) return;
+  try {
+    liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: radius });
+  } catch (_) {}
+}
+
+function createChromeWindows(win) {
+  const glass = glassSupported();
+
+  const pill = new BrowserWindow(childOpts(win, 300, 30));
+  pill.loadFile(path.join(__dirname, 'pill.html'));
+  pill.webContents.once('did-finish-load', () => {
+    positionPill(win);
+    pill.showInactive();
+    pill.webContents.send('pill:init', { glass });
+    const cached = pillState.get(win.id);
+    if (cached) pill.webContents.send('pill:state', cached);
+  });
+
+  applyGlass(pill, 15);
+
+  chromeByHost.set(win.id, { pill });
+  hostByChild.set(pill.id, win);
+
+  const reposition = () => {
+    positionPill(win);
+  };
+  win.on('resize', reposition);
+  win.on('move', reposition);
+  win.on('enter-full-screen', reposition);
+  win.on('leave-full-screen', reposition);
+  win.on('restore', reposition);
+  win.on('closed', () => {
+    const c = chromeByHost.get(win.id);
+    if (c) {
+      for (const w of [c.pill]) {
+        if (!w.isDestroyed()) {
+          hostByChild.delete(w.id);
+          w.destroy();
+        }
+      }
+      chromeByHost.delete(win.id);
+      pillState.delete(win.id);
+    }
+  });
+}
+
+// latest pill state per host window (so a late-loading pill still renders)
+const pillState = new Map();
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -84,10 +211,11 @@ function createWindow() {
     },
   });
 
+  createChromeWindows(win);
+
   win.loadFile(path.join(__dirname, 'chrome', 'index.html'));
   win.webContents.once('did-finish-load', () => {
     win.webContents.focus();
-    win.webContents.send('toast:event', 'focus-url');
   });
   return win;
 }
@@ -95,9 +223,9 @@ function createWindow() {
 function buildMenu() {
   const isMac = process.platform === 'darwin';
   const send = (name, arg) => (menuItem, win) => {
-    const target = win || BrowserWindow.getFocusedWindow();
+    const target = asHost(win || BrowserWindow.getFocusedWindow());
     if (target) {
-      target.webContents.focus();
+      if (name !== 'focus-url') target.webContents.focus();
       target.webContents.send('toast:event', name, arg);
     }
   };
@@ -235,7 +363,7 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (chromeByHost.size === 0) createWindow();
   });
 });
 
@@ -246,4 +374,52 @@ app.on('window-all-closed', () => {
 ipcMain.on('toast:devtools', (e, guestId) => {
   const wc = webContents.fromId(guestId);
   if (wc) wc.toggleDevTools();
+});
+
+// ---- pill chrome IPC ----
+
+ipcMain.on('toast:pill-state', (e, state) => {
+  const host = BrowserWindow.fromWebContents(e.sender);
+  if (!host) return;
+  pillState.set(host.id, state);
+  const c = chromeByHost.get(host.id);
+  if (c && c.pill && !c.pill.isDestroyed()) c.pill.webContents.send('pill:state', state);
+});
+
+// The traffic-light capsule stays DOM (it must render UNDER the native
+// buttons; a glass overlay window above them would refract the lights).
+
+ipcMain.on('toast:pill-request', (e) => {
+  const child = BrowserWindow.fromWebContents(e.sender);
+  const host = child ? hostByChild.get(child.id) : null;
+  if (!host) return;
+  const state = pillState.get(host.id);
+  if (state && !child.isDestroyed()) e.sender.send('pill:state', state);
+});
+
+ipcMain.on('toast:pill-intent', (e, intent) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return;
+  const host = asHost(win);
+  host.webContents.send('toast:pill-intent', intent);
+  // Enter/Esc hand key-focus back to the page (undims the traffic lights);
+  // 'blur' must not refocus — the user deliberately clicked away
+  if (intent.type === 'navigate' || intent.type === 'cancel') {
+    host.focus();
+  }
+});
+
+ipcMain.on('toast:pill-size', (e, { width, height }) => {
+  const child = BrowserWindow.fromWebContents(e.sender);
+  const host = child ? hostByChild.get(child.id) : null;
+  if (!host || child.isDestroyed()) return;
+  positionPill(host, width, height);
+});
+
+ipcMain.on('toast:pill-focus', (e, focused) => {
+  const host = BrowserWindow.fromWebContents(e.sender);
+  const c = host ? chromeByHost.get(host.id) : null;
+  if (!focused || !c || !c.pill || c.pill.isDestroyed()) return;
+  c.pill.focus();
+  c.pill.webContents.send('pill:focus');
 });
