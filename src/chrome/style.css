@@ -32,31 +32,6 @@ webview.page-view.inactive {
   display: none;
 }
 
-/* glass capsule behind the traffic lights — DOM so it renders UNDER the
-   native buttons (lights at x16–73 / y18–31, measured) */
-#lights-pill {
-  position: fixed;
-  left: 8px;
-  top: 10px;
-  width: 73px;
-  height: 29px;
-  border-radius: 14.5px;
-  background: rgba(246, 246, 248, 0.55);
-  backdrop-filter: blur(22px) saturate(1.7);
-  -webkit-backdrop-filter: blur(22px) saturate(1.7);
-  border: 0.5px solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  z-index: 5;
-  pointer-events: none;
-}
-@media (prefers-color-scheme: dark) {
-  #lights-pill {
-    background: rgba(30, 30, 34, 0.52);
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-}
-
 /* top strip for window dragging (titlebar area above page) */
 #drag-strip {
   position: fixed;
