@@ -17,6 +17,10 @@ namespace {
 
 CefRefPtr<CefWindow> g_window;
 std::vector<Tab> g_tabs;
+// The window's content view — the BrowserView CreateTopLevelWindow was built
+// with. Detaching or closing it tears down the whole window, so its tab is
+// hidden rather than closed.
+CefRefPtr<CefBrowserView> g_primary_view;
 int g_active = -1;
 int g_prev_active = -1;
 
@@ -193,6 +197,7 @@ void AttachWindow(CefRefPtr<CefWindow> window) {
 void DetachWindow() {
   g_window = nullptr;
   g_tabs.clear();
+  g_primary_view = nullptr;
   g_active = g_prev_active = -1;
   g_switcher_view = nullptr;
   g_toast_view = nullptr;
@@ -203,6 +208,9 @@ void DetachWindow() {
 
 void AddTabView(CefRefPtr<CefWindow> window, CefRefPtr<CefBrowserView> view,
                 CefRefPtr<CefBrowser> browser) {
+  if (!g_primary_view) {
+    g_primary_view = view;
+  }
   Tab t{view, browser, "New Tab"};
   g_tabs.push_back(t);
   g_active = (int)g_tabs.size() - 1;
@@ -318,7 +326,29 @@ void CloseActiveTab() {
     }
     return;
   }
-  b->GetHost()->CloseBrowser(true);
+  // CloseBrowser() on a BrowserView-hosted browser cascades to
+  // CefWindow::Close() and destroys every browser in the window. Instead
+  // detach the view — CefBrowserView teardown closes its own browser and
+  // fires OnBeforeClose, which runs RemoveBrowser bookkeeping.
+  int next = g_active + 1;
+  if (next >= (int)g_tabs.size()) {
+    next = g_active - 1;
+  }
+  int closing = g_active;
+  ActivateTab(next);
+
+  if (g_tabs[closing].view == g_primary_view) {
+    // The window's primary browser view anchors the window — keep the
+    // browser alive but hidden, and drop only the tab entry.
+    g_tabs[closing].view->SetVisible(false);
+    g_tabs.erase(g_tabs.begin() + closing);
+    g_active = next > closing ? next - 1 : next;
+    return;
+  }
+  if (g_tabs[closing].view && g_window) {
+    g_window->RemoveChildView(g_tabs[closing].view);
+  }
+  g_tabs[closing].view = nullptr;  // Detached; CEF destroys it async.
 }
 
 void ActivateTab(int index) {
@@ -480,8 +510,12 @@ void RemoveBrowser(CefRefPtr<CefBrowser> browser) {
       if (g_active >= (int)g_tabs.size()) {
         g_active = (int)g_tabs.size() - 1;
       }
+      // ActivateTab (SetVisible + SetFocus on the sibling BrowserView) must
+      // not run reentrantly inside OnBeforeClose — it tears down the other
+      // tab's browser. Defer to the next UI tick.
       if (g_active >= 0) {
-        ActivateTab(g_active);
+        CefPostTask(TID_UI,
+                    base::BindOnce(&ActivateTab, g_active));
       }
       return;
     }
