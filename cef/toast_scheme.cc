@@ -90,14 +90,15 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
 
   const std::string host = CefString(&parts.host).ToString();
 
-  if (host == "newtab") {
+  if (host == "newtab" || host == "switcher") {
     CefRefPtr<CefStreamReader> stream = CefStreamReader::CreateForFile(
-        resources_dir_ + "/newtab.html");
+        resources_dir_ + "/" + host + ".html");
     if (stream) {
       return new CefStreamResourceHandler("text/html", stream);
     }
-    return HtmlHandler(WrapPage("toast://newtab",
-                                "<p>newtab.html missing from bundle.</p>"));
+    return HtmlHandler(WrapPage("toast://" + host,
+                                "<p>" + host +
+                                    ".html missing from bundle.</p>"));
   }
   if (host == "version") {
     return HtmlHandler(VersionPage());

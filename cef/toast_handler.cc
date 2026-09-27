@@ -4,6 +4,7 @@
 #include "tests/ceftoast/toast_handler.h"
 
 #include <sstream>
+#include <cstdio>
 #include <string>
 
 #include "include/base/cef_callback.h"
@@ -13,6 +14,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "tests/ceftoast/toast_tabs.h"
 
 namespace {
 
@@ -28,6 +30,7 @@ std::string GetDataURI(const std::string& data, const std::string& mime_type) {
 
 ToastHandler::ToastHandler(bool is_alloy_style)
     : is_alloy_style_(is_alloy_style) {
+  PlatformInstallHooks();
   DCHECK(!g_instance);
   g_instance = this;
 }
@@ -45,6 +48,8 @@ void ToastHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
                                  const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
 
+  toast::NoteTitle(browser, title.ToString());
+
   if (auto browser_view = CefBrowserView::GetForBrowser(browser)) {
     CefRefPtr<CefWindow> window = browser_view->GetWindow();
     if (window) {
@@ -55,6 +60,82 @@ void ToastHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
   }
 }
 
+bool ToastHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                                 const CefKeyEvent& event,
+                                 CefEventHandle os_event,
+                                 bool* is_keyboard_shortcut) {
+  CEF_REQUIRE_UI_THREAD();
+
+  const bool ctrl = (event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
+  const bool cmd = (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0;
+  const bool shift = (event.modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
+  const int kTab = 0x09, kEsc = 0x1B, kCtrl = 0x11;
+  const int kLeft = 0x25, kRight = 0x27;
+
+  // ⌃Tab opens the switcher / steps it while held.
+  if (event.type == KEYEVENT_RAWKEYDOWN && ctrl &&
+      event.windows_key_code == kTab) {
+    if (toast::SwitcherOpen()) {
+      toast::SwitcherStep(shift ? -1 : 1);
+    } else {
+      toast::ShowSwitcher();
+    }
+    *is_keyboard_shortcut = true;
+    return true;
+  }
+
+  // While the switcher is open it owns navigation keys.
+  if (toast::SwitcherOpen()) {
+    if (event.type == KEYEVENT_RAWKEYDOWN &&
+        (event.windows_key_code == kLeft ||
+         event.windows_key_code == kRight)) {
+      toast::SwitcherStep(event.windows_key_code == kRight ? 1 : -1);
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+    if (event.type == KEYEVENT_RAWKEYDOWN &&
+        event.windows_key_code == kEsc) {
+      toast::HideSwitcher(false);
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+    // Releasing ⌃ commits: any keyup arriving without the control flag, or an
+    // explicit ctrl keyup (macOS reports 0x11/0xA2/0xA3), ends the gesture.
+    const bool is_ctrl_key = event.windows_key_code == kCtrl ||
+                             event.windows_key_code == 0xA2 ||
+                             event.windows_key_code == 0xA3;
+    if (event.type == KEYEVENT_KEYUP && (is_ctrl_key || !ctrl)) {
+      toast::HideSwitcher(true);
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+  }
+
+  // ⌘T new tab, ⌘W close tab, ⌘1-9 jump.
+  if (event.type == KEYEVENT_RAWKEYDOWN && cmd) {
+    const int kc = event.windows_key_code;
+    if (kc == 'T') {
+      toast::NewTab("toast://newtab/", this,
+                    is_alloy_style_ ? CEF_RUNTIME_STYLE_ALLOY
+                                    : CEF_RUNTIME_STYLE_CHROME);
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+    if (kc == 'W') {
+      toast::CloseActiveTab();
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+    if (kc >= '1' && kc <= '9') {
+      toast::ActivateTab(kc - '1');
+      *is_keyboard_shortcut = true;
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void ToastHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
 
@@ -62,6 +143,8 @@ void ToastHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
            browser->GetHost()->GetRuntimeStyle());
 
   browser_list_.push_back(browser);
+
+  toast::RegisterBrowser(browser, CefBrowserView::GetForBrowser(browser));
 }
 
 bool ToastHandler::DoClose(CefRefPtr<CefBrowser> browser) {
@@ -83,6 +166,8 @@ void ToastHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
       break;
     }
   }
+
+  toast::RemoveBrowser(browser);
 
   if (browser_list_.empty()) {
     CefQuitMessageLoop();

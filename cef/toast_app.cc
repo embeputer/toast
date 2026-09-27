@@ -12,6 +12,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "tests/ceftoast/toast_handler.h"
 #include "tests/ceftoast/toast_scheme.h"
+#include "tests/ceftoast/toast_tabs.h"
 
 namespace {
 
@@ -20,22 +21,30 @@ class ToastWindowDelegate : public CefWindowDelegate {
  public:
   ToastWindowDelegate(CefRefPtr<CefBrowserView> browser_view,
                       cef_runtime_style_t runtime_style,
-                      cef_show_state_t initial_show_state)
+                      cef_show_state_t initial_show_state,
+                      CefRefPtr<CefClient> client = nullptr)
       : browser_view_(browser_view),
         runtime_style_(runtime_style),
-        initial_show_state_(initial_show_state) {}
+        initial_show_state_(initial_show_state),
+        client_(client) {}
 
   ToastWindowDelegate(const ToastWindowDelegate&) = delete;
   ToastWindowDelegate& operator=(const ToastWindowDelegate&) = delete;
 
   void OnWindowCreated(CefRefPtr<CefWindow> window) override {
-    window->AddChildView(browser_view_);
     if (initial_show_state_ != CEF_SHOW_STATE_HIDDEN) {
       window->Show();
+    }
+
+    // Register the tab and stack the (hidden) switcher overlay on top.
+    toast::AddTabView(window, browser_view_, browser_view_->GetBrowser());
+    if (client_) {
+      toast::CreateOverlayIfNeeded(window, client_, runtime_style_);
     }
   }
 
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
+    toast::DetachWindow();
     browser_view_ = nullptr;
   }
 
@@ -51,6 +60,12 @@ class ToastWindowDelegate : public CefWindowDelegate {
     return CefSize(1100, 720);
   }
 
+  // Window resizes propagate to all stacked tab views + the overlay.
+  void OnLayoutChanged(CefRefPtr<CefView> view,
+                       const CefRect& new_bounds) override {
+    toast::ResizeTabViews(new_bounds.width, new_bounds.height);
+  }
+
   cef_show_state_t GetInitialShowState(CefRefPtr<CefWindow> window) override {
     return initial_show_state_;
   }
@@ -63,6 +78,7 @@ class ToastWindowDelegate : public CefWindowDelegate {
   CefRefPtr<CefBrowserView> browser_view_;
   const cef_runtime_style_t runtime_style_;
   const cef_show_state_t initial_show_state_;
+  CefRefPtr<CefClient> client_;
 
   IMPLEMENT_REFCOUNTING(ToastWindowDelegate);
 };
@@ -78,6 +94,7 @@ class ToastBrowserViewDelegate : public CefBrowserViewDelegate {
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
                                  CefRefPtr<CefBrowserView> popup_browser_view,
                                  bool is_devtools) override {
+    fprintf(stderr, "TOASTDBG OnPopupBrowserViewCreated devtools=%d\n", is_devtools);
     CefWindow::CreateTopLevelWindow(new ToastWindowDelegate(
         popup_browser_view, runtime_style_, CEF_SHOW_STATE_NORMAL));
     return true;
@@ -123,11 +140,11 @@ void ToastApp::OnContextInitialized() {
   CefRefPtr<CefCommandLine> command_line =
       CefCommandLine::GetGlobalCommandLine();
 
-  cef_runtime_style_t runtime_style = CEF_RUNTIME_STYLE_DEFAULT;
-  bool use_alloy_style = command_line->HasSwitch("use-alloy-style");
-  if (use_alloy_style) {
-    runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-  }
+  // toast is a bare-content window (no native strip/omnibox), so it always
+  // uses the Alloy runtime. Chrome-style windows also refuse stacked
+  // BrowserViews, which the tab model relies on.
+  const cef_runtime_style_t runtime_style = CEF_RUNTIME_STYLE_ALLOY;
+  const bool use_alloy_style = true;
 
   // toast://<page> serves internal pages from bundle resources.
   CefRegisterSchemeHandlerFactory(
@@ -164,7 +181,7 @@ void ToastApp::OnContextInitialized() {
 #endif
 
     CefWindow::CreateTopLevelWindow(new ToastWindowDelegate(
-        browser_view, runtime_style, initial_show_state));
+        browser_view, runtime_style, initial_show_state, handler));
   } else {
     CefWindowInfo window_info;
     window_info.runtime_style = runtime_style;

@@ -14,6 +14,8 @@ set(TOAST_SRCS
   toast_handler.h
   toast_scheme.cc
   toast_scheme.h
+  toast_tabs.cc
+  toast_tabs.h
   )
 set(TOAST_SRCS_MAC
   toast_mac.mm
@@ -44,6 +46,7 @@ source_group(ceftoast\\mac\\English.lproj FILES ${TOAST_RESOURCES_MAC_ENGLISH_LP
 
 set(TOAST_WEB_SRCS
   resources/newtab.html
+  resources/switcher.html
   )
 
 set(TOAST_RESOURCES_SRCS

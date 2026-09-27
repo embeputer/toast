@@ -7,9 +7,11 @@
 #include <list>
 
 #include "include/cef_client.h"
+#include "include/cef_keyboard_handler.h"
 
 class ToastHandler : public CefClient,
                      public CefDisplayHandler,
+                     public CefKeyboardHandler,
                      public CefLifeSpanHandler,
                      public CefLoadHandler {
  public:
@@ -21,12 +23,18 @@ class ToastHandler : public CefClient,
 
   // CefClient methods:
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
 
   // CefDisplayHandler methods:
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
+
+  // CefKeyboardHandler methods:
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event, CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override;
 
   // CefLifeSpanHandler methods:
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
@@ -45,6 +53,7 @@ class ToastHandler : public CefClient,
   bool IsClosing() const { return is_closing_; }
 
  private:
+  static void PlatformInstallHooks();
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
