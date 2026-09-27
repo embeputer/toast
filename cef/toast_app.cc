@@ -11,6 +11,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
 #include "tests/ceftoast/toast_handler.h"
+#include "tests/ceftoast/toast_scheme.h"
 
 namespace {
 
@@ -94,7 +95,27 @@ class ToastBrowserViewDelegate : public CefBrowserViewDelegate {
 
 }  // namespace
 
-ToastApp::ToastApp(std::string start_url) : start_url_(std::move(start_url)) {}
+ToastApp::ToastApp(std::string start_url, std::string resources_dir)
+    : start_url_(std::move(start_url)),
+      resources_dir_(std::move(resources_dir)) {}
+
+void ToastApp::OnRegisterCustomSchemes(
+    CefRawPtr<CefSchemeRegistrar> registrar) {
+  registrar->AddCustomScheme("toast", CEF_SCHEME_OPTION_STANDARD |
+                                         CEF_SCHEME_OPTION_SECURE |
+                                         CEF_SCHEME_OPTION_CORS_ENABLED |
+                                         CEF_SCHEME_OPTION_FETCH_ENABLED);
+}
+
+void ToastApp::OnBeforeCommandLineProcessing(
+    const CefString& process_type,
+    CefRefPtr<CefCommandLine> command_line) {
+  if (process_type.empty()) {
+    // Browser process: dev build is unsigned, so avoid the login-keychain
+    // prompt Chromium raises for cookie encryption.
+    command_line->AppendSwitch("use-mock-keychain");
+  }
+}
 
 void ToastApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
@@ -108,13 +129,17 @@ void ToastApp::OnContextInitialized() {
     runtime_style = CEF_RUNTIME_STYLE_ALLOY;
   }
 
+  // toast://<page> serves internal pages from bundle resources.
+  CefRegisterSchemeHandlerFactory(
+      "toast", "", new ToastSchemeHandlerFactory(resources_dir_));
+
   CefRefPtr<ToastHandler> handler(new ToastHandler(use_alloy_style));
 
   CefBrowserSettings browser_settings;
 
   std::string url = command_line->GetSwitchValue("url");
   if (url.empty()) {
-    url = start_url_.empty() ? "https://www.google.com" : start_url_;
+    url = start_url_.empty() ? "toast://newtab/" : start_url_;
   }
 
   const bool use_views = !command_line->HasSwitch("use-native");

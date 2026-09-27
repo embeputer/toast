@@ -78,14 +78,9 @@
 }
 @end
 
-// file:// URL for the bundled new-tab page (empty string if missing).
-static std::string StartURL() {
-  NSString* res =
-      [[NSBundle mainBundle] pathForResource:@"newtab" ofType:@"html"];
-  if (!res) {
-    return "";
-  }
-  return std::string("file://") + [[res stringByStandardizingPath] UTF8String];
+// Absolute path of the app's Contents/Resources directory.
+static std::string ResourcesDir() {
+  return std::string([[[NSBundle mainBundle] resourcePath] UTF8String]);
 }
 
 int main(int argc, char* argv[]) {
@@ -115,7 +110,7 @@ int main(int argc, char* argv[]) {
         stringByAppendingPathComponent:@"Library/Application Support/toast"];
     CefString(&settings.root_cache_path) = [cacheDir UTF8String];
 
-    CefRefPtr<ToastApp> app(new ToastApp(StartURL()));
+    CefRefPtr<ToastApp> app(new ToastApp("toast://newtab/", ResourcesDir()));
 
     if (!CefInitialize(main_args, settings, app.get(), nullptr)) {
       return CefGetExitCode();

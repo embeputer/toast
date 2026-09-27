@@ -12,6 +12,8 @@ set(TOAST_SRCS
   toast_app.h
   toast_handler.cc
   toast_handler.h
+  toast_scheme.cc
+  toast_scheme.h
   )
 set(TOAST_SRCS_MAC
   toast_mac.mm
