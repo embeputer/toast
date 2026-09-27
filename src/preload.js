@@ -1,18 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const SEND_CHANNELS = new Set([
-  'toast:navigate',
-  'toast:new-tab',
-  'toast:close-tab',
-  'toast:activate-tab',
-  'toast:back',
-  'toast:forward',
-  'toast:reload',
-  'toast:stop',
-  'toast:toggle-sidebar',
-]);
-
-const RECEIVE_CHANNELS = new Set(['toast:state', 'toast:event']);
+const SEND_CHANNELS = new Set(['toast:devtools']);
+const RECEIVE_CHANNELS = new Set(['toast:event']);
 
 contextBridge.exposeInMainWorld('toast', {
   send(channel, ...args) {

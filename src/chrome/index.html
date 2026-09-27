@@ -10,58 +10,30 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="toolbar">
-      <div id="url-pill">
-        <div id="progress"></div>
+    <div id="webviews"></div>
+
+    <div id="drag-strip"></div>
+
+    <div id="lights-pill"></div>
+
+    <div id="url-pill" title="Click to edit address">
+      <div id="progress"></div>
+      <div id="tab-label">
         <img id="favicon" alt="" draggable="false" />
-        <input
-          id="url-input"
-          type="text"
-          placeholder="Search or enter website name"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-        />
-        <button id="reload-btn" title="Reload" tabindex="-1">
-          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-            <path
-              id="reload-icon"
-              fill="currentColor"
-              d="M8 2.5a5.5 5.5 0 1 1-5.32 4.11.55.55 0 0 1 1.06.29A4.4 4.4 0 1 0 8 3.6v1.7L5.4 3.35 8 .4v2.1Z"
-            />
-          </svg>
-        </button>
+        <span id="tab-title">New Tab</span>
       </div>
+      <input
+        id="url-input"
+        type="text"
+        placeholder="Search or enter website name"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        hidden
+      />
     </div>
-    <div id="sidebar" hidden>
-      <div id="sidebar-header">
-        <button id="sidebar-close" title="Close Sidebar">
-          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-            <path
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              d="M3 3l10 10M13 3L3 13"
-            />
-          </svg>
-        </button>
-        <span class="sidebar-title">Tabs</span>
-        <button id="sidebar-new-tab" title="New Tab">
-          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-            <path
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              d="M8 3v10M3 8h10"
-            />
-          </svg>
-        </button>
-      </div>
-      <div id="tab-list"></div>
-    </div>
+
     <script src="chrome.js"></script>
   </body>
 </html>

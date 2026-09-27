@@ -1,6 +1,6 @@
 # toast
 
-A minimal Chromium browser that wears Safari's compact-mode chrome.
+A minimal Chromium browser — just a floating address pill and the macOS traffic lights.
 
 ## Run
 
@@ -9,25 +9,34 @@ npm install
 npm start
 ```
 
-Requires macOS (the chrome is built around native traffic lights) and Node + npm for development. Electron supplies the Chromium engine.
+Requires macOS and Node + npm for development. Electron supplies the Chromium engine.
 
 ## What it is
 
-- One slim toolbar: real macOS traffic lights on the left, a compact URL pill centered on the window. No tab strip, no extra buttons.
-- The pill shows just the domain (with favicon) while browsing; click or `⌘L` for the full URL, type to search or enter an address.
-- Tabs live in a left sidebar (`⇧⌘L`), Safari-style. `⌘T` opens a tab and drops you straight into the pill.
-- Pages render in sandboxed `WebContentsView`s; links that want a new window open as tabs instead; downloads go to `~/Downloads`.
+- Pages fill the entire window. There is no toolbar, no tab strip, no sidebar.
+- Top center: a liquid-glass pill showing the tab's favicon + title. Click it (or `⌘L`) to edit the address; `Enter` navigates, `Esc` cancels.
+- Top left: the native traffic lights on a small glass capsule.
+- Tabs exist but have no UI — keyboard only. `⌘T` opens a tab focused into the pill.
+- Pages render in sandboxed `<webview>`s; links that want a new window open as tabs; downloads go to `~/Downloads`.
+- The glass follows the system appearance (light/dark).
 
 ## Shortcuts
 
 | Keys | Action |
 | --- | --- |
-| `⌘L` | Focus address bar |
+| `⌘L` | Edit address |
 | `⌘T` / `⌘W` | New tab / close tab |
-| `⇧⌘L` | Toggle tab sidebar |
 | `⌘[` / `⌘]` | Back / forward |
 | `⌘R` / `⇧⌘R` | Reload / force reload |
-| `Ctrl+Tab` / `⇧⌘]` `⇧⌘[` | Next / previous tab |
+| `Ctrl+Tab`, `⇧⌘]` `⇧⌘[` | Next / previous tab |
 | `⌘1`–`⌘9` | Jump to tab |
 | `⌘N` | New window |
 | `⌥⌘I` | DevTools for the page |
+
+## Install (dmg)
+
+```sh
+npm run dist
+```
+
+Produces `dist/Toast-<version>-arm64.dmg` with a drag-to-Applications layout.

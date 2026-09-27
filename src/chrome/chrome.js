@@ -1,33 +1,35 @@
-const input = document.getElementById('url-input');
-const favicon = document.getElementById('favicon');
-const progress = document.getElementById('progress');
+const webviewsEl = document.getElementById('webviews');
 const pill = document.getElementById('url-pill');
-const reloadBtn = document.getElementById('reload-btn');
-const reloadIcon = document.getElementById('reload-icon');
-const sidebar = document.getElementById('sidebar');
-const tabList = document.getElementById('tab-list');
-const sidebarClose = document.getElementById('sidebar-close');
-const sidebarNewTab = document.getElementById('sidebar-new-tab');
+const favicon = document.getElementById('favicon');
+const tabTitle = document.getElementById('tab-title');
+const input = document.getElementById('url-input');
+const progress = document.getElementById('progress');
 
-const RELOAD_PATH =
-  'M8 2.5a5.5 5.5 0 1 1-5.32 4.11.55.55 0 0 1 1.06.29A4.4 4.4 0 1 0 8 3.6v1.7L5.4 3.35 8 .4v2.1Z';
-const STOP_PATH = 'M3.5 3.5l9 9M12.5 3.5l-9 9';
-
-let state = { tabs: [], activeId: null, sidebarOpen: false };
+const START_URL = 'toast://newtab/';
+const tabs = [];
+let activeId = null;
+let seq = 0;
 let wasLoading = false;
 
 function activeTab() {
-  return state.tabs.find((t) => t.id === state.activeId) || null;
+  return tabs.find((t) => t.id === activeId) || null;
+}
+
+function normalizeInput(value) {
+  const s = value.trim();
+  if (!s) return null;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) return s;
+  if (/^localhost(:\d+)?([/?#]|$)/.test(s) || (/^[^\s]+\.[^\s]{2,}$/.test(s) && !/\s/.test(s))) {
+    return `https://${s}`;
+  }
+  return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
 }
 
 function renderPill() {
   const tab = activeTab();
-  const loading = !!tab?.loading;
-
-  if (document.activeElement !== input) {
-    input.value = tab ? tab.displayUrl : '';
+  if (!pill.classList.contains('editing')) {
+    tabTitle.textContent = tab ? tab.title || 'New Tab' : 'New Tab';
   }
-
   if (tab && tab.favicon) {
     favicon.src = tab.favicon;
     favicon.style.display = '';
@@ -36,22 +38,7 @@ function renderPill() {
     favicon.style.display = 'none';
   }
 
-  reloadIcon.setAttribute('d', loading ? STOP_PATH : RELOAD_PATH);
-  reloadIcon.setAttribute(
-    'fill',
-    loading ? 'none' : 'currentColor'
-  );
-  if (loading) {
-    reloadIcon.setAttribute('stroke', 'currentColor');
-    reloadIcon.setAttribute('stroke-width', '1.4');
-    reloadIcon.setAttribute('stroke-linecap', 'round');
-  } else {
-    reloadIcon.removeAttribute('stroke');
-    reloadIcon.removeAttribute('stroke-width');
-    reloadIcon.removeAttribute('stroke-linecap');
-  }
-
-  // progress fill
+  const loading = !!(tab && tab.loading);
   if (loading && !wasLoading) {
     progress.style.opacity = '1';
     progress.style.transition = 'none';
@@ -75,90 +62,188 @@ function renderPill() {
   wasLoading = loading;
 }
 
-function renderSidebar() {
-  sidebar.hidden = !state.sidebarOpen;
-  tabList.innerHTML = '';
-  for (const tab of state.tabs) {
-    const row = document.createElement('button');
-    row.className = 'tab-row' + (tab.id === state.activeId ? ' active' : '');
-    row.addEventListener('click', () => toast.send('toast:activate-tab', tab.id));
+function attachViewListeners(tab) {
+  const wv = tab.view;
+  const sync = () => renderPill();
 
-    const img = document.createElement('img');
-    img.alt = '';
-    img.draggable = false;
-    if (tab.favicon) img.src = tab.favicon;
-    row.appendChild(img);
+  wv.addEventListener('page-title-updated', (e) => {
+    tab.title = e.title;
+    sync();
+  });
+  wv.addEventListener('page-favicon-updated', (e) => {
+    tab.favicon = e.favicons[0] || null;
+    sync();
+  });
+  const urlChanged = (url) => {
+    tab.url = url;
+    sync();
+  };
+  wv.addEventListener('did-navigate', (e) => {
+    urlChanged(e.url);
+    if (tab.id === activeId && e.url.startsWith(START_URL)) enterEditMode();
+  });
+  wv.addEventListener('did-navigate-in-page', (e) => urlChanged(e.url));
+  wv.addEventListener('did-redirect-navigation', (e) => urlChanged(e.url));
+  wv.addEventListener('did-start-loading', () => {
+    tab.loading = true;
+    sync();
+  });
+  wv.addEventListener('did-stop-loading', () => {
+    tab.loading = false;
+    sync();
+  });
+  wv.addEventListener('new-window', (e) => {
+    createTab(e.url);
+  });
+}
 
-    const title = document.createElement('span');
-    title.className = 'tab-title';
-    title.textContent = tab.displayUrl ? tab.title || tab.displayUrl : 'New Tab';
-    row.appendChild(title);
+function createTab(url, { activate = true } = {}) {
+  const wv = document.createElement('webview');
+  wv.className = 'page-view';
+  wv.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
+  wv.setAttribute('allowpopups', 'false');
+  const tab = {
+    id: ++seq,
+    view: wv,
+    url: '',
+    title: 'New Tab',
+    favicon: null,
+    loading: false,
+  };
+  attachViewListeners(tab);
+  tabs.push(tab);
+  webviewsEl.appendChild(wv);
+  wv.setAttribute('src', url || START_URL);
+  if (activate) activateTab(tab.id);
+  return tab;
+}
 
-    if (tab.loading) {
-      const spinner = document.createElement('span');
-      spinner.className = 'tab-loading';
-      row.appendChild(spinner);
-    }
-
-    const close = document.createElement('span');
-    close.className = 'tab-close';
-    close.textContent = '×';
-    close.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toast.send('toast:close-tab', tab.id);
-    });
-    row.appendChild(close);
-
-    tabList.appendChild(row);
+function activateTab(id) {
+  const tab = tabs.find((t) => t.id === id);
+  if (!tab) return;
+  activeId = id;
+  for (const t of tabs) t.view.classList.toggle('inactive', t.id !== id);
+  exitEditMode();
+  renderPill();
+  if (!tab.url || tab.url.startsWith(START_URL)) {
+    enterEditMode();
+  } else {
+    tab.view.focus();
   }
 }
 
-function render() {
+function closeTab(id) {
+  const idx = tabs.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  if (tabs.length === 1) {
+    window.close();
+    return;
+  }
+  const [tab] = tabs.splice(idx, 1);
+  tab.view.remove();
+  if (activeId === id) {
+    const neighbor = tabs[idx] || tabs[idx - 1];
+    activateTab(neighbor.id);
+  }
   renderPill();
-  renderSidebar();
 }
 
-input.addEventListener('focus', () => {
+function stepTab(dir) {
+  if (tabs.length < 2) return;
+  const idx = tabs.findIndex((t) => t.id === activeId);
+  const next = tabs[(idx + dir + tabs.length) % tabs.length];
+  activateTab(next.id);
+}
+
+function enterEditMode() {
   const tab = activeTab();
-  const url = tab && tab.url && !tab.url.startsWith('toast:') ? tab.url : '';
-  input.value = url;
-  // defer past the click so the whole field ends up selected
+  pill.classList.add('editing');
+  input.hidden = false;
+  input.value = tab && tab.url && !tab.url.startsWith(START_URL) ? tab.url : '';
+  input.focus();
   setTimeout(() => {
     if (document.activeElement === input) input.select();
   }, 0);
-});
+}
 
-input.addEventListener('blur', () => {
-  renderPill();
+function exitEditMode() {
+  pill.classList.remove('editing');
+  input.hidden = true;
+  input.blur();
+}
+
+pill.addEventListener('click', (e) => {
+  if (!pill.classList.contains('editing')) enterEditMode();
 });
 
 input.addEventListener('keydown', (e) => {
+  const tab = activeTab();
   if (e.key === 'Enter') {
-    const v = input.value;
-    input.blur();
-    toast.send('toast:navigate', v);
+    const url = normalizeInput(input.value);
+    exitEditMode();
+    renderPill();
+    if (url && tab) {
+      tab.view.loadURL(url);
+      tab.view.focus();
+    }
   } else if (e.key === 'Escape') {
-    input.blur();
+    exitEditMode();
+    renderPill();
+    if (tab) tab.view.focus();
+  }
+});
+
+input.addEventListener('blur', () => {
+  if (pill.classList.contains('editing')) {
+    exitEditMode();
     renderPill();
   }
 });
 
-reloadBtn.addEventListener('click', () => {
+toast.on('toast:event', (name, arg) => {
   const tab = activeTab();
-  toast.send(tab && tab.loading ? 'toast:stop' : 'toast:reload');
-});
-
-sidebarClose.addEventListener('click', () => toast.send('toast:toggle-sidebar'));
-sidebarNewTab.addEventListener('click', () => toast.send('toast:new-tab'));
-
-toast.on('toast:state', (s) => {
-  state = s;
-  render();
-});
-
-toast.on('toast:event', (name) => {
-  if (name === 'focus-url') {
-    input.focus();
-    input.select();
+  switch (name) {
+    case 'focus-url':
+      enterEditMode();
+      break;
+    case 'new-tab':
+      createTab(START_URL);
+      break;
+    case 'open-in-new-tab':
+      createTab(arg);
+      break;
+    case 'close-tab':
+      if (tab) closeTab(tab.id);
+      break;
+    case 'back':
+      if (tab && tab.view.canGoBack()) tab.view.goBack();
+      if (tab) tab.view.focus();
+      break;
+    case 'forward':
+      if (tab && tab.view.canGoForward()) tab.view.goForward();
+      if (tab) tab.view.focus();
+      break;
+    case 'reload':
+      if (tab) tab.view.reload();
+      if (tab) tab.view.focus();
+      break;
+    case 'force-reload':
+      if (tab) tab.view.reloadIgnoringCache();
+      if (tab) tab.view.focus();
+      break;
+    case 'next-tab':
+      stepTab(1);
+      break;
+    case 'prev-tab':
+      stepTab(-1);
+      break;
+    case 'tab':
+      if (tabs[arg]) activateTab(tabs[arg].id);
+      break;
+    case 'devtools':
+      if (tab) toast.send('toast:devtools', tab.view.getWebContentsId());
+      break;
   }
 });
+
+createTab(START_URL);
