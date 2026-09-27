@@ -1,8 +1,24 @@
 const webviewsEl = document.getElementById('webviews');
 const switcherEl = document.getElementById('switcher');
 const switcherRow = document.getElementById('switcher-row');
+const setupEl = document.getElementById('setup');
+const enginesEl = document.getElementById('engines');
+const dlToast = document.getElementById('dl-toast');
+
+const ENGINES = {
+  google: { name: 'Google', url: 'https://www.google.com/search?q=' },
+  duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+  bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
+  brave: { name: 'Brave Search', url: 'https://search.brave.com/search?q=' },
+};
+
+let settings = {};
 
 const START_URL = 'toast://newtab/';
+function newtabUrl() {
+  const e = settings.engine || 'google';
+  return `${START_URL}?e=${e}`;
+}
 const tabs = [];
 let activeId = null;
 let seq = 0;
@@ -15,15 +31,52 @@ function activeTab() {
 function normalizeInput(value) {
   const s = value.trim();
   if (!s) return null;
+  if (/^chrome:\/\//i.test(s)) return `toast://${s.slice('chrome://'.length)}`;
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) return s;
   if (/^localhost(:\d+)?([/?#]|$)/.test(s) || (/^[^\s]+\.[^\s]{2,}$/.test(s) && !/\s/.test(s))) {
     return `https://${s}`;
   }
-  return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+  return `${(ENGINES[settings.engine] || ENGINES.google).url}${encodeURIComponent(s)}`;
 }
 
 function isNewtab(tab) {
   return !tab || !tab.url || tab.url.startsWith(START_URL);
+}
+
+// toast:// URLs that aren't our own pages load their chromium internal
+// equivalent — chrome:// is an implementation detail, never shown
+const TOAST_PAGES = new Set(['newtab', 'downloads', 'version']);
+function toastHost(url) {
+  const m = /^toast:\/\/([a-z-]+)/i.exec(url);
+  return m ? m[1] : null;
+}
+function loadURL(wv, url) {
+  const h = toastHost(url);
+  if (h && !TOAST_PAGES.has(h)) {
+    wv.loadURL(`chrome://${url.slice('toast://'.length)}`);
+  } else {
+    wv.loadURL(url);
+  }
+}
+
+// ---- setup ----
+
+function showSetup() {
+  enginesEl.replaceChildren();
+  for (const [id, eng] of Object.entries(ENGINES)) {
+    const b = document.createElement('div');
+    b.className = 'engine';
+    b.textContent = eng.name;
+    b.addEventListener('click', () => {
+      settings.engine = id;
+      toast.send('toast:settings-set', { engine: id });
+      setupEl.hidden = true;
+      // re-point any open new-tab pages at the chosen engine
+      for (const t of tabs) if (isNewtab(t)) t.view.loadURL(newtabUrl());
+    });
+    enginesEl.appendChild(b);
+  }
+  setupEl.hidden = false;
 }
 
 // The pill renders in its own glass window; we broadcast what to show.
@@ -67,7 +120,8 @@ function attachViewListeners(tab) {
     sync();
   });
   const urlChanged = (url) => {
-    tab.url = url;
+    // chrome:// internally loads the page, but the address is toast://
+    tab.url = /^chrome:\/\//i.test(url) ? `toast://${url.slice('chrome://'.length)}` : url;
     sync();
   };
   wv.addEventListener('did-navigate', (e) => {
@@ -75,7 +129,20 @@ function attachViewListeners(tab) {
     if (tab.id === activeId && editing) exitEditMode();
     // fresh webview steals focus during load; hand it back so the
     // new-tab page's search field can take it
-    if (e.url.startsWith(START_URL)) wv.focus();
+    if (e.url.startsWith(START_URL)) {
+      focusGuest(wv);
+      // keep the engine param fresh when a stale newtab reloads
+      const want = newtabUrl();
+      if (e.url !== want) loadURL(wv, want);
+    } else if (toastHost(e.url) && !TOAST_PAGES.has(toastHost(e.url))) {
+      // page-initiated toast://<page> nav — swap in the real chrome:// page
+      // via a programmatic load (pages can't navigate to chrome:// directly)
+      loadURL(wv, e.url);
+    } else if (!toastHost(e.url)) {
+      // page content begins below the floating pill/lights and scrolls
+      // under them — no static bar needed
+      wv.insertCSS('html{padding-top:56px !important;scroll-padding-top:56px !important}');
+    }
   });
   wv.addEventListener('did-navigate-in-page', (e) => urlChanged(e.url));
   wv.addEventListener('did-redirect-navigation', (e) => urlChanged(e.url));
@@ -89,6 +156,15 @@ function attachViewListeners(tab) {
   });
   wv.addEventListener('new-window', (e) => {
     createTab(e.url);
+  });
+  wv.addEventListener('dom-ready', () => {
+    // re-focus after attach: focusing an already-active element is a no-op,
+    // and the first focus ran before the guest frame existed
+    if (tab.id === activeId) {
+      wv.blur();
+      wv.focus();
+      toast.send('toast:focus-host', wv.getWebContentsId());
+    }
   });
 }
 
@@ -108,19 +184,30 @@ function createTab(url, { activate = true } = {}) {
   attachViewListeners(tab);
   tabs.push(tab);
   webviewsEl.appendChild(wv);
-  wv.setAttribute('src', url || START_URL);
+  wv.setAttribute('src', url || newtabUrl());
   if (activate) activateTab(tab.id);
   return tab;
+}
+
+function focusGuest(wv) {
+  wv.focus();
+  try {
+    toast.send('toast:focus-host', wv.getWebContentsId());
+  } catch (_) {}
 }
 
 function activateTab(id) {
   const tab = tabs.find((t) => t.id === id);
   if (!tab) return;
+  const prev = activeTab();
+  // a focused webview holds renderer frame focus — release it or the new
+  // tab's page never receives key events
+  if (prev && prev.id !== id) prev.view.blur();
   activeId = id;
   for (const t of tabs) t.view.classList.toggle('inactive', t.id !== id);
   exitEditMode();
   broadcastPill();
-  tab.view.focus();
+  focusGuest(tab.view);
 }
 
 function closeTab(id) {
@@ -150,6 +237,7 @@ function stepTab(dir) {
 
 let switcherOpen = false;
 let switcherSel = 0;
+let switcherOriginId = null;
 
 function renderSwitcher() {
   switcherRow.replaceChildren();
@@ -176,6 +264,7 @@ function openSwitcher() {
   if (switcherOpen || tabs.length === 0) return;
   if (editing) exitEditMode();
   switcherOpen = true;
+  switcherOriginId = activeId;
   switcherSel = Math.max(0, tabs.findIndex((t) => t.id === activeId));
   renderSwitcher();
   switcherEl.hidden = false;
@@ -195,8 +284,18 @@ function commitSwitcher() {
   if (tab) activateTab(tab.id);
 }
 
+function cancelSwitcher() {
+  const origin = tabs.find((t) => t.id === switcherOriginId);
+  closeSwitcher();
+  if (origin) activateTab(origin.id);
+}
+
+// each step previews the tab live behind the overlay — releasing Ctrl just
+// has to close the switcher, never decide anything
 function stepSwitcher(dir) {
   switcherSel = (switcherSel + dir + tabs.length) % tabs.length;
+  const tab = tabs[switcherSel];
+  if (tab) activateTab(tab.id);
   renderSwitcher();
 }
 
@@ -205,7 +304,7 @@ toast.on('toast:switcher-key', ({ key, shift }) => {
   if (key === 'ArrowRight' || (key === 'Tab' && !shift)) stepSwitcher(1);
   else if (key === 'ArrowLeft' || (key === 'Tab' && shift)) stepSwitcher(-1);
   else if (key === 'Enter') commitSwitcher();
-  else if (key === 'Escape') closeSwitcher();
+  else if (key === 'Escape') cancelSwitcher();
 });
 
 toast.on('toast:switcher-commit', () => {
@@ -214,7 +313,7 @@ toast.on('toast:switcher-commit', () => {
 
 // click the dimmed backdrop to dismiss without switching
 switcherEl.addEventListener('click', (e) => {
-  if (e.target === switcherEl) closeSwitcher();
+  if (e.target === switcherEl) cancelSwitcher();
 });
 
 toast.on('toast:event', (name, arg) => {
@@ -250,6 +349,9 @@ toast.on('toast:event', (name, arg) => {
       break;
     case 'open-switcher':
       openSwitcher();
+      break;
+    case 'open-setup':
+      showSetup();
       break;
     case 'next-tab':
       stepTab(1);
@@ -293,5 +395,39 @@ toast.on('toast:pill-intent', (intent) => {
   }
 });
 
-createTab(START_URL);
-broadcastPill();
+toast.on('toast:settings', (s) => {
+  settings = s;
+});
+
+let dlToastTimer = null;
+function showToast(text) {
+  dlToast.textContent = text;
+  dlToast.hidden = false;
+  clearTimeout(dlToastTimer);
+  dlToastTimer = setTimeout(() => {
+    dlToast.hidden = true;
+  }, 3000);
+}
+toast.on('toast:notify', (text) => showToast(text));
+toast.on('toast:download', ({ name, state }) => {
+  const label =
+    state === 'started'
+      ? `Downloading ${name}…`
+      : state === 'completed'
+        ? `Downloaded ${name}`
+        : state === 'cancelled'
+          ? `Cancelled ${name}`
+          : `Failed ${name}`;
+  showToast(label);
+});
+
+(async () => {
+  try {
+    settings = await toast.invoke('toast:settings-get');
+  } catch (_) {
+    settings = {};
+  }
+  if (!settings.engine) showSetup();
+  createTab();
+  broadcastPill();
+})();

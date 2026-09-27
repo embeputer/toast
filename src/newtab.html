@@ -57,7 +57,7 @@
         border: none;
         outline: none;
         background: transparent;
-        padding: 0 8px 0 26px;
+        padding: 0 20px;
         font: 16px -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
         color: inherit;
       }
@@ -130,23 +130,50 @@
     </div>
     <div class="hint"><kbd>&#8984;K</kbd> for the command toast &nbsp;&middot;&nbsp; <kbd>&#8984;T</kbd> new tab &nbsp;&middot;&nbsp; <kbd>&#8963;Tab</kbd> switch tabs</div>
     <script>
+      const ENGINE_URLS = {
+        google: 'https://www.google.com/search?q=',
+        duckduckgo: 'https://duckduckgo.com/?q=',
+        bing: 'https://www.bing.com/search?q=',
+        brave: 'https://search.brave.com/search?q=',
+      };
+      const engine = new URLSearchParams(location.search).get('e') || 'google';
       const input = document.getElementById('search');
       input.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         const s = input.value.trim();
         if (!s) return;
         let url;
-        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+        if (/^chrome:\/\//i.test(s)) {
+          url = `toast://${s.slice('chrome://'.length)}`;
+        } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
           url = s;
         } else if (/^localhost(:\d+)?([/?#]|$)/.test(s) || /^[^\s]+\.[^\s]{2,}$/.test(s)) {
           url = `https://${s}`;
         } else {
-          url = `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+          url = `${ENGINE_URLS[engine] || ENGINE_URLS.google}${encodeURIComponent(s)}`;
         }
         window.location.href = url;
       });
-      window.addEventListener('DOMContentLoaded', () => input.focus());
-      window.addEventListener('focus', () => input.focus());
+      // if the host's focus handoff raced past us, keys still land on the
+      // document — scoop them into the input ourselves
+      document.addEventListener('keydown', (e) => {
+        if (e.target === input || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === 'Backspace') {
+          input.focus();
+          input.value = input.value.slice(0, -1);
+          e.preventDefault();
+        } else if (e.key.length === 1) {
+          input.focus();
+          input.value += e.key;
+          e.preventDefault();
+        }
+      });
+      const grab = () => input.focus();
+      window.addEventListener('DOMContentLoaded', grab);
+      window.addEventListener('focus', grab);
+      // focus can race script attach when the host focuses the guest early;
+      // retry until the document settles
+      [0, 50, 150, 400].forEach((t) => setTimeout(grab, t));
     </script>
   </body>
 </html>

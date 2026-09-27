@@ -7,6 +7,7 @@ const {
   session,
   webContents,
   clipboard,
+  dialog,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -25,6 +26,40 @@ function glassSupported() {
   } catch (_) {
     return false;
   }
+}
+
+// in-memory download log for toast://downloads
+const downloads = [];
+
+function internalPage(kind, body) {
+  return `<!doctype html><meta charset="utf-8"><title>toast://${kind}</title><style>
+    body{font:14px -apple-system,'SF Pro Text',sans-serif;margin:0;padding:64px 0 40px;display:flex;flex-direction:column;align-items:center;color:rgba(0,0,0,.85);background:#f4f3f0}
+    h1{font-weight:600;font-size:22px;margin:0 0 18px}
+    table{border-collapse:collapse;width:min(640px,80vw);background:rgba(255,255,255,.8);border-radius:14px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+    td,th{padding:9px 14px;font-size:12.5px;text-align:left;border-bottom:.5px solid rgba(0,0,0,.06)}
+    td:first-child{color:rgba(0,0,0,.5);width:110px}
+    tr:last-child td{border-bottom:none}
+    .empty{color:rgba(0,0,0,.4);font-size:13px;padding:18px}
+    @media(prefers-color-scheme:dark){body{background:#191817;color:rgba(255,255,255,.87)}table{background:rgba(45,44,43,.8)}td{border-color:rgba(255,255,255,.08)}td:first-child{color:rgba(255,255,255,.45)}.empty{color:rgba(255,255,255,.4)}}
+  </style>${body}`;
+}
+
+// ---- settings (persisted to userData/settings.json) ----
+
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+
+function readSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeSettings(patch) {
+  const s = { ...readSettings(), ...patch };
+  fs.writeFileSync(settingsFile(), JSON.stringify(s));
+  return s;
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -64,8 +99,13 @@ function attachKeyIntercept(wc, host) {
         key: input.key,
         shift: !!(input.modifiers && input.modifiers.includes('shift')),
       });
-    } else if (input.type === 'keyUp' && input.key === 'Control') {
-      host.webContents.send('toast:switcher-commit');
+    } else if (input.type === 'keyUp') {
+      // commit on Control release; also on the first keyup after Control is
+      // already gone — modifier releases aren't reliably delivered to every
+      // webContents, so this covers releases we never saw
+      if (input.key === 'Control' || !(input.modifiers || []).includes('control')) {
+        host.webContents.send('toast:switcher-commit');
+      }
     }
   });
 }
@@ -278,6 +318,30 @@ function buildMenu() {
         { label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => createWindow() },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: send('close-tab') },
         { type: 'separator' },
+        {
+          label: 'Load Extension…',
+          click: async () => {
+            const r = await dialog.showOpenDialog({
+              properties: ['openDirectory'],
+              message: 'Choose an unpacked extension folder',
+            });
+            if (r.canceled || !r.filePaths[0]) return;
+            const host = BrowserWindow.getFocusedWindow();
+            const target = host ? asHost(host) : null;
+            const notify = (text) => {
+              if (target) target.webContents.send('toast:notify', text);
+            };
+            try {
+              const ext = await session
+                .fromPartition('persist:webview')
+                .loadExtension(r.filePaths[0]);
+              notify(`Loaded extension ${ext.name}`);
+            } catch (err) {
+              notify(`Extension failed: ${err.message}`);
+            }
+          },
+        },
+        { type: 'separator' },
         ...(isMac ? [{ role: 'close' }] : [{ role: 'quit' }]),
       ],
     },
@@ -298,6 +362,7 @@ function buildMenu() {
       label: 'View',
       submenu: [
         { label: 'Command Toast', accelerator: 'CmdOrCtrl+K', click: send('focus-url') },
+        { label: 'Setup…', accelerator: 'CmdOrCtrl+,', click: send('open-setup') },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: send('reload') },
         { label: 'Force Reload', accelerator: 'CmdOrCtrl+Shift+R', click: send('force-reload') },
@@ -356,7 +421,41 @@ app.whenReady().then(() => {
   app.setName('Toast');
 
   protocol.handle('toast', (request) => {
-    const pathName = new URL(request.url).pathname;
+    const u = new URL(request.url);
+    const host = u.hostname;
+    if (host === 'downloads') {
+      const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      const rows = downloads.length
+        ? downloads
+            .map(
+              (d) =>
+                `<tr><td>${esc(d.state)}</td><td>${esc(d.name)}</td><td>${esc(
+                  d.when
+                )}</td></tr>`
+            )
+            .join('')
+        : '<tr><td colspan="3" class="empty">No downloads yet</td></tr>';
+      const body = `<h1>Downloads</h1><table><tr><th>state</th><th>file</th><th>when</th></tr>${rows}</table>`;
+      return new Response(internalPage('downloads', body), {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+    if (host === 'version') {
+      const rows = [
+        ['Toast', app.getVersion()],
+        ['Chromium', process.versions.chrome],
+        ['Electron', process.versions.electron],
+        ['V8', process.versions.v8],
+        ['Node', process.versions.node],
+        ['OS', `${process.platform} ${process.arch}`],
+      ]
+        .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
+        .join('');
+      return new Response(internalPage('version', `<h1>toast</h1><table>${rows}</table>`), {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+    const pathName = u.pathname;
     const isIcon = pathName.endsWith('/icon.png') || pathName === '/icon.png';
     const file = path.join(__dirname, isIcon ? 'icon.png' : 'newtab.html');
     return new Response(fs.readFileSync(file), {
@@ -376,8 +475,19 @@ app.whenReady().then(() => {
     ]);
     cb(allowed.has(permission));
   };
-  const downloadHandler = (e, item) => {
+  const downloadHandler = (e, item, wc) => {
     item.setSavePath(path.join(app.getPath('downloads'), item.getFilename()));
+    const name = item.getFilename();
+    const entry = { name, state: 'downloading', when: new Date().toLocaleTimeString() };
+    downloads.unshift(entry);
+    if (downloads.length > 50) downloads.pop();
+    const host = wc ? hostWindow(wc) : null;
+    if (host) host.webContents.send('toast:download', { name, state: 'started' });
+    item.once('done', (ev, state) => {
+      entry.state = state === 'completed' ? 'done' : state;
+      if (host && !host.isDestroyed())
+        host.webContents.send('toast:download', { name, state });
+    });
   };
   for (const ses of [session.defaultSession, session.fromPartition('persist:webview')]) {
     ses.setPermissionRequestHandler(permissionHandler);
@@ -418,6 +528,25 @@ ipcMain.on('toast:pill-state', (e, state) => {
     }
     c.pill.webContents.send('pill:state', state);
   }
+});
+
+ipcMain.handle('toast:settings-get', () => readSettings());
+
+ipcMain.on('toast:settings-set', (e, patch) => {
+  const s = writeSettings(patch);
+  const host = BrowserWindow.fromWebContents(e.sender);
+  if (host) host.webContents.send('toast:settings', s);
+});
+
+// keyboard focus lives on the embedder: focusing the host webContents
+// re-focuses its active element (the <webview>), which forwards into the
+// guest. Focusing the guest's webContents directly leaves every document
+// blurred.
+ipcMain.on('toast:focus-host', (e, guestId) => {
+  const host = BrowserWindow.fromWebContents(e.sender);
+  if (host) host.webContents.focus();
+  const guest = guestId ? webContents.fromId(guestId) : null;
+  if (guest && !guest.isDestroyed()) guest.focus();
 });
 
 ipcMain.on('toast:switcher', (e, { open }) => {
