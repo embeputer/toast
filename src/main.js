@@ -51,6 +51,25 @@ function asHost(win) {
   return hostByChild.get(win.id) || win;
 }
 
+// While the switcher overlay is open, arrows/Tab/Enter/Escape are eaten and
+// relayed to the chrome, and releasing Control commits the selection.
+function attachKeyIntercept(wc, host) {
+  wc.on('before-input-event', (event, input) => {
+    const c = chromeByHost.get(host.id);
+    if (!c || !c.switcher) return;
+    const down = input.type === 'keyDown' || input.type === 'rawKeyDown';
+    if (down && ['ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Escape'].includes(input.key)) {
+      event.preventDefault();
+      host.webContents.send('toast:switcher-key', {
+        key: input.key,
+        shift: !!(input.modifiers && input.modifiers.includes('shift')),
+      });
+    } else if (input.type === 'keyUp' && input.key === 'Control') {
+      host.webContents.send('toast:switcher-commit');
+    }
+  });
+}
+
 function buildContextMenu(win, wc, params) {
   const send = (name, arg) => win.webContents.send('toast:event', name, arg);
   const items = [
@@ -92,12 +111,10 @@ function buildContextMenu(win, wc, params) {
 
 // ---- floating glass chrome (real NSGlassEffectView on macOS 26+) ----
 //
-// The capsule behind the traffic lights and the address pill are each a small
-// transparent child window filled edge-to-edge with a native glass view.
-// Child windows follow the parent when it moves; we re-derive their position
-// on resize/fullscreen changes. DOM inside each child renders the actual
-// content (lights capsule is empty; pill shows favicon/title/input) on top
-// of the glass.
+// The address pill is a small transparent child window filled edge-to-edge
+// with a native glass view. Child windows follow the parent when it moves;
+// we re-derive its position on resize/fullscreen changes. The DOM inside
+// renders the pill content (favicon/title/input) on top of the glass.
 
 const PILL_TOP = 12;
 
@@ -163,8 +180,14 @@ function createChromeWindows(win) {
 
   applyGlass(pill, 15);
 
-  chromeByHost.set(win.id, { pill });
+  chromeByHost.set(win.id, { pill, switcher: false });
   hostByChild.set(pill.id, win);
+  attachKeyIntercept(pill.webContents, win);
+  // like ⌘Tab: losing window focus commits the pending selection
+  win.on('blur', () => {
+    const c = chromeByHost.get(win.id);
+    if (c && c.switcher) win.webContents.send('toast:switcher-commit');
+  });
 
   const reposition = () => {
     positionPill(win);
@@ -212,6 +235,7 @@ function createWindow() {
   });
 
   createChromeWindows(win);
+  attachKeyIntercept(win.webContents, win);
 
   win.loadFile(path.join(__dirname, 'chrome', 'index.html'));
   win.webContents.once('did-finish-load', () => {
@@ -296,8 +320,8 @@ function buildMenu() {
     {
       label: 'Tabs',
       submenu: [
-        { label: 'Next Tab', accelerator: 'Ctrl+Tab', click: send('next-tab') },
-        { label: 'Previous Tab', accelerator: 'Ctrl+Shift+Tab', click: send('prev-tab') },
+        { label: 'Tab Switcher', accelerator: 'Ctrl+Tab', click: send('open-switcher') },
+        { label: 'Tab Switcher', accelerator: 'Ctrl+Shift+Tab', visible: false, click: send('open-switcher') },
         { label: 'Next Tab', accelerator: 'CmdOrCtrl+Shift+]', visible: false, click: send('next-tab') },
         { label: 'Previous Tab', accelerator: 'CmdOrCtrl+Shift+[', visible: false, click: send('prev-tab') },
         { type: 'separator' },
@@ -321,6 +345,7 @@ function setupGuestDefaults(wc) {
   if (!win) return;
 
   wc.on('context-menu', (e, params) => buildContextMenu(win, wc, params));
+  attachKeyIntercept(wc, win);
   wc.setWindowOpenHandler(({ url }) => {
     win.webContents.send('toast:event', 'open-in-new-tab', url);
     return { action: 'deny' };
@@ -391,6 +416,12 @@ ipcMain.on('toast:pill-state', (e, state) => {
     }
     c.pill.webContents.send('pill:state', state);
   }
+});
+
+ipcMain.on('toast:switcher', (e, { open }) => {
+  const host = BrowserWindow.fromWebContents(e.sender);
+  const c = host ? chromeByHost.get(host.id) : null;
+  if (c) c.switcher = !!open;
 });
 
 ipcMain.on('toast:pill-request', (e) => {

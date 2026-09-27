@@ -32,6 +32,71 @@ webview.page-view.inactive {
   display: none;
 }
 
+/* tab switcher overlay */
+#switcher {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+#switcher[hidden] {
+  display: none;
+}
+#switcher-row {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 20px;
+  background: rgba(246, 246, 248, 0.55);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 0.5px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.sw-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  max-width: 200px;
+  min-width: 0;
+  font: 500 12.5px -apple-system, 'SF Pro Text', sans-serif;
+  color: rgba(0, 0, 0, 0.8);
+  cursor: default;
+}
+.sw-chip img {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  flex: none;
+}
+.sw-chip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sw-chip.selected {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  #switcher-row {
+    background: rgba(30, 30, 34, 0.55);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .sw-chip {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .sw-chip.selected {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  }
+}
+
 /* top strip for window dragging (titlebar area above page) */
 #drag-strip {
   position: fixed;

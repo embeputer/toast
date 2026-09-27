@@ -1,4 +1,6 @@
 const webviewsEl = document.getElementById('webviews');
+const switcherEl = document.getElementById('switcher');
+const switcherRow = document.getElementById('switcher-row');
 
 const START_URL = 'toast://newtab/';
 const tabs = [];
@@ -144,6 +146,77 @@ function stepTab(dir) {
   activateTab(next.id);
 }
 
+// ---- tab switcher ----
+
+let switcherOpen = false;
+let switcherSel = 0;
+
+function renderSwitcher() {
+  switcherRow.replaceChildren();
+  tabs.forEach((t, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'sw-chip' + (i === switcherSel ? ' selected' : '');
+    if (t.favicon) {
+      const img = document.createElement('img');
+      img.src = t.favicon;
+      chip.appendChild(img);
+    }
+    const span = document.createElement('span');
+    span.textContent = t.title || 'New Tab';
+    chip.appendChild(span);
+    chip.addEventListener('click', () => {
+      switcherSel = i;
+      commitSwitcher();
+    });
+    switcherRow.appendChild(chip);
+  });
+}
+
+function openSwitcher() {
+  if (switcherOpen || tabs.length === 0) return;
+  if (editing) exitEditMode();
+  switcherOpen = true;
+  switcherSel = Math.max(0, tabs.findIndex((t) => t.id === activeId));
+  renderSwitcher();
+  switcherEl.hidden = false;
+  toast.send('toast:switcher', { open: true });
+}
+
+function closeSwitcher() {
+  if (!switcherOpen) return;
+  switcherOpen = false;
+  switcherEl.hidden = true;
+  toast.send('toast:switcher', { open: false });
+}
+
+function commitSwitcher() {
+  const tab = tabs[switcherSel];
+  closeSwitcher();
+  if (tab) activateTab(tab.id);
+}
+
+function stepSwitcher(dir) {
+  switcherSel = (switcherSel + dir + tabs.length) % tabs.length;
+  renderSwitcher();
+}
+
+toast.on('toast:switcher-key', ({ key, shift }) => {
+  if (!switcherOpen) return;
+  if (key === 'ArrowRight' || (key === 'Tab' && !shift)) stepSwitcher(1);
+  else if (key === 'ArrowLeft' || (key === 'Tab' && shift)) stepSwitcher(-1);
+  else if (key === 'Enter') commitSwitcher();
+  else if (key === 'Escape') closeSwitcher();
+});
+
+toast.on('toast:switcher-commit', () => {
+  if (switcherOpen) commitSwitcher();
+});
+
+// click the dimmed backdrop to dismiss without switching
+switcherEl.addEventListener('click', (e) => {
+  if (e.target === switcherEl) closeSwitcher();
+});
+
 toast.on('toast:event', (name, arg) => {
   const tab = activeTab();
   switch (name) {
@@ -174,6 +247,9 @@ toast.on('toast:event', (name, arg) => {
     case 'force-reload':
       if (tab) tab.view.reloadIgnoringCache();
       if (tab) tab.view.focus();
+      break;
+    case 'open-switcher':
+      openSwitcher();
       break;
     case 'next-tab':
       stepTab(1);

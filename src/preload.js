@@ -7,6 +7,7 @@ const sendChannels = new Set([
   'toast:pill-size',
   'toast:pill-request',
   'toast:pill-focus',
+  'toast:switcher',
 ]);
 const onChannels = new Set([
   'toast:event',
@@ -14,6 +15,8 @@ const onChannels = new Set([
   'pill:state',
   'pill:focus',
   'pill:init',
+  'toast:switcher-key',
+  'toast:switcher-commit',
 ]);
 
 contextBridge.exposeInMainWorld('toast', {
