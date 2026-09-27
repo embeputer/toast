@@ -273,7 +273,7 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
-        { label: 'Focus Address Bar', accelerator: 'CmdOrCtrl+L', click: send('focus-url') },
+        { label: 'Command Toast', accelerator: 'CmdOrCtrl+K', click: send('focus-url') },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: send('reload') },
         { label: 'Force Reload', accelerator: 'CmdOrCtrl+Shift+R', click: send('force-reload') },

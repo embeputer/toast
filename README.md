@@ -14,7 +14,7 @@ Requires macOS and Node + npm for development. Electron supplies the Chromium en
 ## What it is
 
 - Pages fill the entire window. There is no toolbar, no tab strip, no sidebar.
-- Top center: a liquid-glass pill showing the tab's favicon + title. Click it (or `⌘L`) to edit the address; `Enter` navigates, `Esc` cancels.
+- Top center: a liquid-glass pill showing the tab's favicon + title. Click it (or `⌘K`, the future command toast) to edit the address; `Enter` navigates, `Esc` cancels.
 - Top left: the native macOS traffic lights, bare.
 - Tabs exist but have no UI — keyboard only. `⌘T` opens a tab focused into the pill.
 - Pages render in sandboxed `<webview>`s; links that want a new window open as tabs; downloads go to `~/Downloads`.
@@ -24,7 +24,7 @@ Requires macOS and Node + npm for development. Electron supplies the Chromium en
 
 | Keys | Action |
 | --- | --- |
-| `⌘L` | Edit address |
+| `⌘K` | Command toast (edit address) |
 | `⌘T` / `⌘W` | New tab / close tab |
 | `⌘[` / `⌘]` | Back / forward |
 | `⌘R` / `⇧⌘R` | Reload / force reload |
