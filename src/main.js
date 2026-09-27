@@ -355,10 +355,12 @@ function setupGuestDefaults(wc) {
 app.whenReady().then(() => {
   app.setName('Toast');
 
-  protocol.handle('toast', () => {
-    const file = path.join(__dirname, 'newtab.html');
+  protocol.handle('toast', (request) => {
+    const pathName = new URL(request.url).pathname;
+    const isIcon = pathName.endsWith('/icon.png') || pathName === '/icon.png';
+    const file = path.join(__dirname, isIcon ? 'icon.png' : 'newtab.html');
     return new Response(fs.readFileSync(file), {
-      headers: { 'content-type': 'text/html; charset=utf-8' },
+      headers: { 'content-type': isIcon ? 'image/png' : 'text/html; charset=utf-8' },
     });
   });
 

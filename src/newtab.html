@@ -16,45 +16,64 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 18px;
         font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
         background: #f5f4f2;
         color: #3a3835;
       }
-      .wordmark {
-        font-family: Georgia, 'Times New Roman', serif;
-        font-size: 44px;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        /* letterpress: pressed into the surface */
-        color: rgba(0, 0, 0, 0.11);
-        text-shadow:
-          0 -1px 1px rgba(0, 0, 0, 0.2),
-          0 1px 1px rgba(255, 255, 255, 0.95),
-          0 2px 3px rgba(0, 0, 0, 0.04);
+      .logo {
+        margin-top: 27vh;
+        width: 104px;
+        height: 104px;
+        /* ghosted imprint on the surface */
+        filter: grayscale(1) contrast(0.92);
+        opacity: 0.22;
         user-select: none;
+        -webkit-user-drag: none;
+      }
+      #bar {
+        margin-top: 17vh;
+        display: flex;
+        align-items: center;
+        width: min(760px, 76vw);
+        height: 58px;
+        border-radius: 29px;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.05),
+          0 12px 32px rgba(0, 0, 0, 0.07);
       }
       #search {
-        width: min(460px, 70vw);
-        height: 40px;
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        border-radius: 20px;
-        padding: 0 18px;
-        font-size: 15px;
-        font: inherit;
-        background: rgba(255, 255, 255, 0.7);
-        color: inherit;
+        flex: 1;
+        height: 100%;
+        border: none;
         outline: none;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-      }
-      #search:focus {
-        border-color: rgba(0, 113, 227, 0.5);
-        box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.18);
-        background: #fff;
+        background: transparent;
+        padding: 0 8px 0 26px;
+        font: 16px -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        color: inherit;
       }
       #search::placeholder {
-        color: #9a978f;
+        color: #a3a09a;
+      }
+      .switch-hint {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-right: 14px;
+        font-size: 13px;
+        color: #9b9890;
+        white-space: nowrap;
+        user-select: none;
+      }
+      .switch-hint kbd {
+        font: 12px -apple-system, sans-serif;
+        color: #6d6a64;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        padding: 3px 8px;
+        background: #f6f5f3;
       }
       .hint {
         position: fixed;
@@ -65,7 +84,7 @@
         font-size: 13px;
         color: #8a8781;
       }
-      kbd {
+      .hint kbd {
         font: 12px -apple-system, sans-serif;
         color: #8a8781;
         border: 1px solid rgba(0, 0, 0, 0.12);
@@ -79,28 +98,32 @@
           background: #242322;
           color: #e8e6e3;
         }
-        #search {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.16);
+        .logo {
+          filter: grayscale(1) brightness(1.6) contrast(0.9);
+          opacity: 0.16;
         }
-        #search:focus {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: rgba(66, 153, 255, 0.6);
-          box-shadow: 0 0 0 3px rgba(66, 153, 255, 0.22);
+        #bar {
+          background: rgba(255, 255, 255, 0.09);
+          border-color: rgba(255, 255, 255, 0.14);
+          box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.25),
+            0 12px 32px rgba(0, 0, 0, 0.35);
         }
         #search::placeholder {
           color: #7d7a75;
         }
-        .wordmark {
-          color: rgba(255, 255, 255, 0.1);
-          text-shadow:
-            0 -1px 1px rgba(0, 0, 0, 0.55),
-            0 1px 1px rgba(255, 255, 255, 0.07);
+        .switch-hint {
+          color: #8f8c87;
+        }
+        .switch-hint kbd {
+          background: rgba(255, 255, 255, 0.1);
+          color: #b8b5b0;
+          border-color: rgba(255, 255, 255, 0.14);
         }
         .hint {
           color: #8f8c87;
         }
-        kbd {
+        .hint kbd {
           background: #383736;
           color: #8f8c87;
           border-color: rgba(255, 255, 255, 0.14);
@@ -109,17 +132,20 @@
     </style>
   </head>
   <body>
-    <div class="wordmark">toast</div>
-    <input
-      id="search"
-      type="text"
-      placeholder="Search or enter website name"
-      autocomplete="off"
-      autocorrect="off"
-      autocapitalize="off"
-      spellcheck="false"
-      autofocus
-    />
+    <img class="logo" src="icon.png" alt="" draggable="false" />
+    <div id="bar">
+      <input
+        id="search"
+        type="text"
+        placeholder="Search or type a URL"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        autofocus
+      />
+      <div class="switch-hint"><kbd>&#8963;Tab</kbd><span>to switch</span></div>
+    </div>
     <div class="hint"><kbd>&#8984;K</kbd> for the command toast &nbsp;&middot;&nbsp; <kbd>&#8984;T</kbd> new tab &nbsp;&middot;&nbsp; <kbd>&#8963;Tab</kbd> switch tabs</div>
     <script>
       const input = document.getElementById('search');
