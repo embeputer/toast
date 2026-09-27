@@ -1,0 +1,62 @@
+// toast — CEF client handler.
+// Adapted from cefsimple (BSD license, Chromium Embedded Framework Authors).
+
+#ifndef TOAST_CEF_TOAST_HANDLER_H_
+#define TOAST_CEF_TOAST_HANDLER_H_
+
+#include <list>
+
+#include "include/cef_client.h"
+
+class ToastHandler : public CefClient,
+                     public CefDisplayHandler,
+                     public CefLifeSpanHandler,
+                     public CefLoadHandler {
+ public:
+  explicit ToastHandler(bool is_alloy_style);
+  ~ToastHandler() override;
+
+  // Single global instance.
+  static ToastHandler* GetInstance();
+
+  // CefClient methods:
+  CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+
+  // CefDisplayHandler methods:
+  void OnTitleChange(CefRefPtr<CefBrowser> browser,
+                     const CefString& title) override;
+
+  // CefLifeSpanHandler methods:
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+  bool DoClose(CefRefPtr<CefBrowser> browser) override;
+  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
+
+  // CefLoadHandler methods:
+  void OnLoadError(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefFrame> frame,
+                   ErrorCode errorCode,
+                   const CefString& errorText,
+                   const CefString& failedUrl) override;
+
+  void ShowMainWindow();
+  void CloseAllBrowsers(bool force_close);
+  bool IsClosing() const { return is_closing_; }
+
+ private:
+  void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
+                           const CefString& title);
+  void PlatformShowWindow(CefRefPtr<CefBrowser> browser);
+
+  const bool is_alloy_style_;
+
+  typedef std::list<CefRefPtr<CefBrowser>> BrowserList;
+  BrowserList browser_list_;
+
+  bool is_closing_ = false;
+
+  IMPLEMENT_REFCOUNTING(ToastHandler);
+};
+
+#endif  // TOAST_CEF_TOAST_HANDLER_H_
