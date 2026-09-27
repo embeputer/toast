@@ -17,7 +17,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 14px;
+        gap: 18px;
         font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
         background: #f5f4f2;
         color: #3a3835;
@@ -27,6 +27,27 @@
         font-size: 44px;
         font-weight: 700;
         letter-spacing: -0.02em;
+      }
+      #search {
+        width: min(460px, 70vw);
+        height: 40px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 20px;
+        padding: 0 18px;
+        font-size: 15px;
+        font: inherit;
+        background: rgba(255, 255, 255, 0.7);
+        color: inherit;
+        outline: none;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      }
+      #search:focus {
+        border-color: rgba(0, 113, 227, 0.5);
+        box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.18);
+        background: #fff;
+      }
+      #search::placeholder {
+        color: #9a978f;
       }
       .hint {
         font-size: 13px;
@@ -46,6 +67,18 @@
           background: #242322;
           color: #e8e6e3;
         }
+        #search {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.16);
+        }
+        #search:focus {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(66, 153, 255, 0.6);
+          box-shadow: 0 0 0 3px rgba(66, 153, 255, 0.22);
+        }
+        #search::placeholder {
+          color: #7d7a75;
+        }
         .hint {
           color: #8f8c87;
         }
@@ -59,6 +92,35 @@
   </head>
   <body>
     <div class="wordmark">toast</div>
+    <input
+      id="search"
+      type="text"
+      placeholder="Search or enter website name"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      autofocus
+    />
     <div class="hint"><kbd>&#8984;K</kbd> for the command toast &nbsp;&middot;&nbsp; <kbd>&#8984;T</kbd> new tab &nbsp;&middot;&nbsp; <kbd>&#8963;Tab</kbd> switch tabs</div>
+    <script>
+      const input = document.getElementById('search');
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const s = input.value.trim();
+        if (!s) return;
+        let url;
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+          url = s;
+        } else if (/^localhost(:\d+)?([/?#]|$)/.test(s) || /^[^\s]+\.[^\s]{2,}$/.test(s)) {
+          url = `https://${s}`;
+        } else {
+          url = `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+        }
+        window.location.href = url;
+      });
+      window.addEventListener('DOMContentLoaded', () => input.focus());
+      window.addEventListener('focus', () => input.focus());
+    </script>
   </body>
 </html>

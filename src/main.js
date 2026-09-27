@@ -383,11 +383,15 @@ ipcMain.on('toast:pill-state', (e, state) => {
   if (!host) return;
   pillState.set(host.id, state);
   const c = chromeByHost.get(host.id);
-  if (c && c.pill && !c.pill.isDestroyed()) c.pill.webContents.send('pill:state', state);
+  if (c && c.pill && !c.pill.isDestroyed()) {
+    if (state.hidden) {
+      if (c.pill.isVisible()) c.pill.hide();
+    } else if (!c.pill.isVisible()) {
+      c.pill.showInactive();
+    }
+    c.pill.webContents.send('pill:state', state);
+  }
 });
-
-// The traffic-light capsule stays DOM (it must render UNDER the native
-// buttons; a glass overlay window above them would refract the lights).
 
 ipcMain.on('toast:pill-request', (e) => {
   const child = BrowserWindow.fromWebContents(e.sender);

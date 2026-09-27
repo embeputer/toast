@@ -20,7 +20,13 @@ function normalizeInput(value) {
   return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
 }
 
+function isNewtab(tab) {
+  return !tab || !tab.url || tab.url.startsWith(START_URL);
+}
+
 // The pill renders in its own glass window; we broadcast what to show.
+// Hidden entirely on the new-tab page (which has its own search bar),
+// unless the user explicitly opened it (⌘K / click).
 function broadcastPill() {
   const tab = activeTab();
   toast.send('toast:pill-state', {
@@ -29,6 +35,7 @@ function broadcastPill() {
     url: tab && tab.url && !tab.url.startsWith(START_URL) ? tab.url : '',
     loading: !!(tab && tab.loading),
     editing,
+    hidden: !editing && isNewtab(tab),
   });
 }
 
@@ -63,7 +70,10 @@ function attachViewListeners(tab) {
   };
   wv.addEventListener('did-navigate', (e) => {
     urlChanged(e.url);
-    if (tab.id === activeId && tab.autoEdit && e.url.startsWith(START_URL)) enterEditMode();
+    if (tab.id === activeId && editing) exitEditMode();
+    // fresh webview steals focus during load; hand it back so the
+    // new-tab page's search field can take it
+    if (e.url.startsWith(START_URL)) wv.focus();
   });
   wv.addEventListener('did-navigate-in-page', (e) => urlChanged(e.url));
   wv.addEventListener('did-redirect-navigation', (e) => urlChanged(e.url));
@@ -80,7 +90,7 @@ function attachViewListeners(tab) {
   });
 }
 
-function createTab(url, { activate = true, autoEdit = true } = {}) {
+function createTab(url, { activate = true } = {}) {
   const wv = document.createElement('webview');
   wv.className = 'page-view';
   wv.setAttribute('webpreferences', 'contextIsolation=yes,sandbox=yes');
@@ -92,7 +102,6 @@ function createTab(url, { activate = true, autoEdit = true } = {}) {
     title: 'New Tab',
     favicon: null,
     loading: false,
-    autoEdit,
   };
   attachViewListeners(tab);
   tabs.push(tab);
@@ -109,11 +118,7 @@ function activateTab(id) {
   for (const t of tabs) t.view.classList.toggle('inactive', t.id !== id);
   exitEditMode();
   broadcastPill();
-  if (tab.autoEdit && (!tab.url || tab.url.startsWith(START_URL))) {
-    enterEditMode();
-  } else {
-    tab.view.focus();
-  }
+  tab.view.focus();
 }
 
 function closeTab(id) {
@@ -212,8 +217,5 @@ toast.on('toast:pill-intent', (intent) => {
   }
 });
 
-// the launch tab opens on the new-tab page without grabbing edit focus
-// (editing moves key-focus to the pill window, which would dim the traffic
-// lights at startup)
-createTab(START_URL, { autoEdit: false });
+createTab(START_URL);
 broadcastPill();
