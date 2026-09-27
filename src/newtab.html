@@ -16,27 +16,17 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        justify-content: center;
         font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
         background: #f5f4f2;
         color: #3a3835;
       }
-      .logo {
-        margin-top: 27vh;
-        width: 104px;
-        height: 104px;
-        /* ghosted imprint on the surface */
-        filter: grayscale(1) contrast(0.92);
-        opacity: 0.22;
-        user-select: none;
-        -webkit-user-drag: none;
-      }
       #bar {
-        margin-top: 17vh;
         display: flex;
         align-items: center;
-        width: min(760px, 76vw);
-        height: 58px;
-        border-radius: 29px;
+        width: min(640px, 72vw);
+        height: 54px;
+        border-radius: 16px;
         background: #fff;
         border: 1px solid rgba(0, 0, 0, 0.08);
         box-shadow:
@@ -55,25 +45,6 @@
       }
       #search::placeholder {
         color: #a3a09a;
-      }
-      .switch-hint {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        margin-right: 14px;
-        font-size: 13px;
-        color: #9b9890;
-        white-space: nowrap;
-        user-select: none;
-      }
-      .switch-hint kbd {
-        font: 12px -apple-system, sans-serif;
-        color: #6d6a64;
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        border-bottom-width: 2px;
-        border-radius: 6px;
-        padding: 3px 8px;
-        background: #f6f5f3;
       }
       .hint {
         position: fixed;
@@ -98,10 +69,6 @@
           background: #242322;
           color: #e8e6e3;
         }
-        .logo {
-          filter: grayscale(1) brightness(1.6) contrast(0.9);
-          opacity: 0.16;
-        }
         #bar {
           background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.14);
@@ -111,14 +78,6 @@
         }
         #search::placeholder {
           color: #7d7a75;
-        }
-        .switch-hint {
-          color: #8f8c87;
-        }
-        .switch-hint kbd {
-          background: rgba(255, 255, 255, 0.1);
-          color: #b8b5b0;
-          border-color: rgba(255, 255, 255, 0.14);
         }
         .hint {
           color: #8f8c87;
@@ -132,7 +91,6 @@
     </style>
   </head>
   <body>
-    <img class="logo" src="icon.png" alt="" draggable="false" />
     <div id="bar">
       <input
         id="search"
@@ -144,7 +102,6 @@
         spellcheck="false"
         autofocus
       />
-      <div class="switch-hint"><kbd>&#8963;Tab</kbd><span>to switch</span></div>
     </div>
     <div class="hint"><kbd>&#8984;K</kbd> for the command toast &nbsp;&middot;&nbsp; <kbd>&#8984;T</kbd> new tab &nbsp;&middot;&nbsp; <kbd>&#8963;Tab</kbd> switch tabs</div>
     <script>
