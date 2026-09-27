@@ -48,6 +48,10 @@ void HideSwitcher(bool commit);  // commit=false restores the previous tab
 bool SwitcherOpen();
 CefRefPtr<CefWindow> MainWindow();
 
+// HUD toast (download started/finished/failed), bottom-center, auto-hides.
+// kind: "start" | "done" | "fail"
+void ShowToast(const std::string& msg, const std::string& kind);
+
 // Called from the client's display handler to keep chip titles fresh.
 void NoteTitle(CefRefPtr<CefBrowser> browser, const std::string& title);
 

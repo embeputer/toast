@@ -9,6 +9,8 @@
 #include "include/cef_request.h"
 #include "include/cef_version.h"
 #include "include/wrapper/cef_stream_resource_handler.h"
+#include "tests/ceftoast/toast_downloads.h"
+#include "tests/ceftoast/toast_settings.h"
 
 namespace {
 
@@ -54,10 +56,65 @@ std::string VersionPage() {
 }
 
 std::string DownloadsPage() {
-  // Real download tracking lands with the CefDownloadHandler wiring; for now
-  // this is the internal-page shell, same as the Electron version grew from.
-  return WrapPage("toast://downloads",
-                  "<p>Downloads will be listed here.</p>");
+  return WrapPage("toast://downloads", toast::DownloadsHtml());
+}
+
+// Injects the runtime config pages read: window.__toast = {...}.
+std::string ConfigJs() {
+  std::stringstream ss;
+  ss << "window.__toast={engine:\"" << toast::SearchEngineQueryBase()
+     << "\",engineName:\"" << toast::SearchEngineName() << "\"};";
+  return ss.str();
+}
+
+// Generic redirect page (meta refresh — simplest reliable redirect for a
+// custom scheme).
+std::string RedirectPage(const std::string& target) {
+  return "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" "
+         "content=\"0;url=" +
+         target + "\">";
+}
+
+std::string QueryParam(const CefString& query, const std::string& key) {
+  const std::string q = query.ToString();
+  const std::string prefix = key + "=";
+  size_t pos = q.find(prefix);
+  if (pos == std::string::npos) {
+    return "";
+  }
+  pos += prefix.size();
+  const size_t end = q.find('&', pos);
+  return CefURIDecode(q.substr(pos, end == std::string::npos
+                                          ? std::string::npos
+                                          : end - pos),
+                      true, static_cast<cef_uri_unescape_rule_t>(
+                                UU_REPLACE_PLUS_WITH_SPACE))
+      .ToString();
+}
+
+// toast://settings — engine re-picker (grows as settings do).
+std::string SettingsPage() {
+  const std::string cur = toast::SearchEngineId();
+  struct E { const char* id; const char* name; };
+  const E engines[] = {{"duckduckgo", "DuckDuckGo"},
+                       {"google", "Google"},
+                       {"bing", "Bing"},
+                       {"brave", "Brave Search"}};
+  std::stringstream ss;
+  ss << "<style>.engines{display:flex;flex-direction:column;gap:10px;"
+        "max-width:320px}a.engine{display:flex;justify-content:space-between;"
+        "padding:12px 16px;border-radius:12px;text-decoration:none;color:"
+        "inherit;background:rgba(127,127,127,0.12);border:0.5px solid "
+        "rgba(127,127,127,0.25)}a.engine.cur{border-color:#0066cc}</style>"
+        "<h2 style=\"font-size:15px;margin-top:8px\">Default search engine</h2>"
+        "<div class=\"engines\">";
+  for (const auto& e : engines) {
+    ss << "<a class=\"engine" << (e.id == cur ? " cur" : "")
+       << "\" href=\"toast://pickengine?e=" << e.id << "\">" << e.name
+       << (e.id == cur ? "<span>✓</span>" : "<span>→</span>") << "</a>";
+  }
+  ss << "</div>";
+  return WrapPage("toast://settings", ss.str());
 }
 
 std::string StubPage(const std::string& host) {
@@ -90,7 +147,8 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
 
   const std::string host = CefString(&parts.host).ToString();
 
-  if (host == "newtab" || host == "switcher") {
+  if (host == "newtab" || host == "switcher" || host == "setup" ||
+      host == "dltoast") {
     CefRefPtr<CefStreamReader> stream = CefStreamReader::CreateForFile(
         resources_dir_ + "/" + host + ".html");
     if (stream) {
@@ -99,6 +157,19 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
     return HtmlHandler(WrapPage("toast://" + host,
                                 "<p>" + host +
                                     ".html missing from bundle.</p>"));
+  }
+  if (host == "config") {
+    const std::string js = ConfigJs();
+    auto stream = CefStreamReader::CreateForData(
+        static_cast<void*>(const_cast<char*>(js.data())), js.size());
+    return new CefStreamResourceHandler("text/javascript", stream);
+  }
+  if (host == "pickengine") {
+    toast::SetSearchEngine(QueryParam(CefString(&parts.query), "e"));
+    return HtmlHandler(RedirectPage("toast://newtab/"));
+  }
+  if (host == "settings") {
+    return HtmlHandler(SettingsPage());
   }
   if (host == "version") {
     return HtmlHandler(VersionPage());

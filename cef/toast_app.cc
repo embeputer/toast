@@ -12,6 +12,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "tests/ceftoast/toast_handler.h"
 #include "tests/ceftoast/toast_scheme.h"
+#include "tests/ceftoast/toast_settings.h"
 #include "tests/ceftoast/toast_tabs.h"
 
 namespace {
@@ -156,7 +157,11 @@ void ToastApp::OnContextInitialized() {
 
   std::string url = command_line->GetSwitchValue("url");
   if (url.empty()) {
-    url = start_url_.empty() ? "toast://newtab/" : start_url_;
+    // First run lands on the engine-picker setup screen; afterwards the
+    // normal start page.
+    url = toast::HasCompletedSetup()
+              ? (start_url_.empty() ? "toast://newtab/" : start_url_)
+              : "toast://setup/";
   }
 
   const bool use_views = !command_line->HasSwitch("use-native");

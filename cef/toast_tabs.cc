@@ -4,7 +4,11 @@
 
 #include <sstream>
 
+#include "include/base/cef_bind.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_app.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace toast {
@@ -15,13 +19,18 @@ std::vector<Tab> g_tabs;
 int g_active = -1;
 int g_prev_active = -1;
 
+// Switcher + toast are plain child views (NOT CefWindow overlays — overlay
+// BrowserViews keep eating mouse clicks even when hidden). They stay at the
+// top of the z-order via KeepChromeOnTop().
 CefRefPtr<CefBrowserView> g_switcher_view;
-CefRefPtr<CefOverlayController> g_overlay;
+CefRefPtr<CefBrowserView> g_toast_view;
 CefRefPtr<CefClient> g_ui_client;
 bool g_switcher_open = false;
 int g_switcher_sel = -1;
+uint64_t g_toast_gen = 0;
 
 const char kSwitcherURL[] = "toast://switcher/";
+const char kToastURL[] = "toast://dltoast/";
 
 // Client for the overlay browser: lifespan only, it never hosts real tabs.
 class UIClient : public CefClient {
@@ -79,14 +88,52 @@ void ShowActiveOnly() {
 }
 
 void LayoutSwitcher() {
-  if (!g_overlay || !g_window) {
+  if (!g_switcher_view || !g_window || !g_switcher_view->IsVisible()) {
     return;
   }
   CefRect wb_client = g_window->GetBounds();
   const int w = wb_client.width, h = wb_client.height;
   const int sw = w > 640 ? 560 : w - 80;
   const int sh = 120;
-  g_overlay->SetBounds(CefRect((w - sw) / 2, (int)(h * 0.38), sw, sh));
+  g_switcher_view->SetBounds(
+      CefRect((w - sw) / 2, (int)(h * 0.38), sw, sh));
+}
+
+void LayoutToast() {
+  if (!g_toast_view || !g_window || !g_toast_view->IsVisible()) {
+    return;
+  }
+  CefRect wb = g_window->GetBounds();
+  const int tw = 460, th = 60;
+  g_toast_view->SetBounds(
+      CefRect((wb.width - tw) / 2, wb.height - th - 60, tw, th));
+}
+
+void HideToastNow(uint64_t gen) {
+  if (gen != g_toast_gen || !g_toast_view) {
+    return;  // superseded by a newer toast
+  }
+  CefRefPtr<CefBrowser> b = g_toast_view->GetBrowser();
+  if (b) {
+    b->GetMainFrame()->ExecuteJavaScript("window.__toastHide&&__toastHide()",
+                                         kToastURL, 0);
+  }
+  g_toast_view->SetVisible(false);
+}
+
+// Chrome UI views must float above tab content; tabs added later sit on
+// top unless we re-order the chrome children back to the end of the list.
+void KeepChromeOnTop() {
+  if (!g_window) {
+    return;
+  }
+  const int top = (int)g_window->GetChildViewCount() - 1;
+  if (g_switcher_view) {
+    g_window->ReorderChildView(g_switcher_view, top);
+  }
+  if (g_toast_view) {
+    g_window->ReorderChildView(g_toast_view, top);
+  }
 }
 
 }  // namespace
@@ -100,7 +147,7 @@ void DetachWindow() {
   g_tabs.clear();
   g_active = g_prev_active = -1;
   g_switcher_view = nullptr;
-  g_overlay = nullptr;
+  g_toast_view = nullptr;
   g_ui_client = nullptr;
   g_switcher_open = false;
 }
@@ -114,6 +161,7 @@ void AddTabView(CefRefPtr<CefWindow> window, CefRefPtr<CefBrowserView> view,
   window->AddChildView(view);
   CefSize s = window->GetSize();
   view->SetBounds(CefRect(0, 0, s.width, s.height));
+  KeepChromeOnTop();
 
   ShowActiveOnly();
   if (browser) {
@@ -126,11 +174,12 @@ void ResizeTabViews(int width, int height) {
     t.view->SetBounds(CefRect(0, 0, width, height));
   }
   LayoutSwitcher();
+  LayoutToast();
 }
 
 void EnsureSwitcher(CefRefPtr<CefClient> client,
                     cef_runtime_style_t runtime_style) {
-  if (g_overlay || !g_window) {
+  if (g_switcher_view || !g_window) {
     return;
   }
   if (!g_ui_client) {
@@ -141,10 +190,17 @@ void EnsureSwitcher(CefRefPtr<CefClient> client,
   g_switcher_view = CefBrowserView::CreateBrowserView(
       g_ui_client, kSwitcherURL, settings, nullptr, nullptr,
       new AlloyViewDelegate);
-  g_overlay = g_window->AddOverlayView(g_switcher_view,
-                                     CEF_DOCKING_MODE_CUSTOM,
-                                     /*can_activate=*/false);
-  LayoutSwitcher();
+  g_window->AddChildView(g_switcher_view);
+  g_switcher_view->SetVisible(false);
+
+  // HUD toast: bottom-center, transparent, hidden until a download event.
+  CefBrowserSettings toast_settings;
+  toast_settings.background_color = CefColorSetARGB(0, 0, 0, 0);
+  g_toast_view = CefBrowserView::CreateBrowserView(
+      g_ui_client, kToastURL, toast_settings, nullptr, nullptr,
+      new AlloyViewDelegate);
+  g_window->AddChildView(g_toast_view);
+  g_toast_view->SetVisible(false);
 }
 
 void NewTab(const CefString& url, CefRefPtr<CefClient> client,
@@ -223,7 +279,7 @@ CefRefPtr<CefBrowser> ActiveBrowser() {
 }
 
 void ShowSwitcher() {
-  if (!g_overlay || g_tabs.size() < 1) {
+  if (!g_switcher_view || g_tabs.size() < 1) {
     return;
   }
   if (!g_switcher_open) {
@@ -231,8 +287,9 @@ void ShowSwitcher() {
     g_prev_active = g_active;
     g_switcher_sel = g_active;
   }
+  KeepChromeOnTop();
+  g_switcher_view->SetVisible(true);
   LayoutSwitcher();
-  g_overlay->SetVisible(true);
   PushSwitcherState();
 }
 
@@ -247,7 +304,7 @@ void HideSwitcher(bool commit) {
     ShowActiveOnly();
   }
   g_switcher_open = false;
-  g_overlay->SetVisible(false);
+  g_switcher_view->SetVisible(false);
 }
 
 void SwitcherStep(int delta) {
@@ -261,6 +318,30 @@ void SwitcherStep(int delta) {
 
 bool SwitcherOpen() {
   return g_switcher_open;
+}
+
+void ShowToast(const std::string& msg, const std::string& kind) {
+  if (!CefCurrentlyOn(TID_UI)) {
+    CefPostTask(TID_UI,
+                base::BindOnce(&toast::ShowToast, msg, kind));
+    return;
+  }
+  if (!g_toast_view) {
+    return;
+  }
+  KeepChromeOnTop();
+  g_toast_view->SetVisible(true);
+  LayoutToast();
+  CefRefPtr<CefBrowser> b =
+      g_toast_view ? g_toast_view->GetBrowser() : nullptr;
+  if (b) {
+    std::stringstream js;
+    js << "window.__toastMsg&&__toastMsg(\"" << EscapeJS(msg) << "\",\""
+       << EscapeJS(kind) << "\")";
+    b->GetMainFrame()->ExecuteJavaScript(js.str(), kToastURL, 0);
+  }
+  const uint64_t gen = ++g_toast_gen;
+  CefPostDelayedTask(TID_UI, base::BindOnce(&HideToastNow, gen), 3500);
 }
 
 void RemoveBrowser(CefRefPtr<CefBrowser> browser) {

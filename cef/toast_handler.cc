@@ -14,11 +14,17 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "tests/ceftoast/toast_downloads.h"
 #include "tests/ceftoast/toast_tabs.h"
 
 namespace {
 
 ToastHandler* g_instance = nullptr;
+
+std::string DownloadsDir() {
+  const char* home = getenv("HOME");
+  return home ? std::string(home) + "/Downloads" : ".";
+}
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
@@ -60,6 +66,27 @@ void ToastHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
   }
 }
 
+bool ToastHandler::OnBeforeDownload(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    const CefString& suggested_name,
+    CefRefPtr<CefBeforeDownloadCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+
+  // No picker dialog — files land in ~/Downloads, name dedup left to CEF.
+  callback->Continue(DownloadsDir() + "/" + suggested_name.ToString(),
+                     /*show_dialog=*/false);
+  return true;
+}
+
+void ToastHandler::OnDownloadUpdated(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    CefRefPtr<CefDownloadItemCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  toast::TrackDownload(download_item);
+}
+
 bool ToastHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                                  const CefKeyEvent& event,
                                  CefEventHandle os_event,
@@ -69,10 +96,10 @@ bool ToastHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   const bool ctrl = (event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
   const bool cmd = (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0;
   const bool shift = (event.modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
-  const int kTab = 0x09, kEsc = 0x1B, kCtrl = 0x11;
+  const int kTab = 0x09, kEsc = 0x1B, kEnter = 0x0D;
   const int kLeft = 0x25, kRight = 0x27;
 
-  // ⌃Tab opens the switcher / steps it while held.
+  // ⌃Tab opens the switcher (sticky) / steps the selection.
   if (event.type == KEYEVENT_RAWKEYDOWN && ctrl &&
       event.windows_key_code == kTab) {
     if (toast::SwitcherOpen()) {
@@ -99,12 +126,9 @@ bool ToastHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
       *is_keyboard_shortcut = true;
       return true;
     }
-    // Releasing ⌃ commits: any keyup arriving without the control flag, or an
-    // explicit ctrl keyup (macOS reports 0x11/0xA2/0xA3), ends the gesture.
-    const bool is_ctrl_key = event.windows_key_code == kCtrl ||
-                             event.windows_key_code == 0xA2 ||
-                             event.windows_key_code == 0xA3;
-    if (event.type == KEYEVENT_KEYUP && (is_ctrl_key || !ctrl)) {
+    // Enter commits the selection and closes.
+    if (event.type == KEYEVENT_RAWKEYDOWN &&
+        event.windows_key_code == kEnter) {
       toast::HideSwitcher(true);
       *is_keyboard_shortcut = true;
       return true;

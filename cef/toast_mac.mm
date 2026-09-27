@@ -10,6 +10,7 @@
 #include "include/wrapper/cef_library_loader.h"
 #include "tests/ceftoast/toast_app.h"
 #include "tests/ceftoast/toast_handler.h"
+#include "tests/ceftoast/toast_settings.h"
 
 @interface ToastAppDelegate : NSObject <NSApplicationDelegate>
 - (void)createApplication:(id)object;
@@ -109,6 +110,7 @@ int main(int argc, char* argv[]) {
     NSString* cacheDir = [NSHomeDirectory()
         stringByAppendingPathComponent:@"Library/Application Support/toast"];
     CefString(&settings.root_cache_path) = [cacheDir UTF8String];
+    toast::SetSettingsDir([cacheDir UTF8String]);
 
     CefRefPtr<ToastApp> app(new ToastApp("toast://newtab/", ResourcesDir()));
 

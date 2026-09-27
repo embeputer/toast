@@ -10,10 +10,14 @@
 set(TOAST_SRCS
   toast_app.cc
   toast_app.h
+  toast_downloads.cc
+  toast_downloads.h
   toast_handler.cc
   toast_handler.h
   toast_scheme.cc
   toast_scheme.h
+  toast_settings.cc
+  toast_settings.h
   toast_tabs.cc
   toast_tabs.h
   )
@@ -45,7 +49,9 @@ APPEND_PLATFORM_SOURCES(TOAST_RESOURCES_MAC_ENGLISH_LPROJ_SRCS)
 source_group(ceftoast\\mac\\English.lproj FILES ${TOAST_RESOURCES_MAC_ENGLISH_LPROJ_SRCS})
 
 set(TOAST_WEB_SRCS
+  resources/dltoast.html
   resources/newtab.html
+  resources/setup.html
   resources/switcher.html
   )
 

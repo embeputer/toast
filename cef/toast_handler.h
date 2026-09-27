@@ -7,10 +7,12 @@
 #include <list>
 
 #include "include/cef_client.h"
+#include "include/cef_download_handler.h"
 #include "include/cef_keyboard_handler.h"
 
 class ToastHandler : public CefClient,
                      public CefDisplayHandler,
+                     public CefDownloadHandler,
                      public CefKeyboardHandler,
                      public CefLifeSpanHandler,
                      public CefLoadHandler {
@@ -23,6 +25,7 @@ class ToastHandler : public CefClient,
 
   // CefClient methods:
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
@@ -30,6 +33,16 @@ class ToastHandler : public CefClient,
   // CefDisplayHandler methods:
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
+
+  // CefDownloadHandler methods:
+  bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefDownloadItem> download_item,
+                        const CefString& suggested_name,
+                        CefRefPtr<CefBeforeDownloadCallback> callback) override;
+  void OnDownloadUpdated(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefDownloadItem> download_item,
+      CefRefPtr<CefDownloadItemCallback> callback) override;
 
   // CefKeyboardHandler methods:
   bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,

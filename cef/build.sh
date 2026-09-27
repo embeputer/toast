@@ -29,9 +29,7 @@ fi
 # Inject our sources.
 rsync -a --delete --exclude 'build.sh' --exclude 'README.md' "$REPO_ROOT/cef/" "$TARGET_DIR/"
 
-# Web resources shared with the Electron shell (single source of truth).
-mkdir -p "$TARGET_DIR/resources"
-cp "$REPO_ROOT/src/newtab.html" "$TARGET_DIR/resources/newtab.html"
+# CEF-internal pages live in cef/resources/ and ride the rsync above.
 
 # App icon: reuse the Electron build's icon if present.
 if [[ -f "$REPO_ROOT/build/icon.icns" ]]; then
