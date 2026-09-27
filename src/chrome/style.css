@@ -96,9 +96,9 @@ body {
 
 #lights-pill {
   position: fixed;
-  left: 7px;
+  left: 6px;
   top: 10px;
-  width: 88px;
+  width: 60px;
   height: 34px;
   border-radius: 17px;
   z-index: 5;
