@@ -1,0 +1,14 @@
+{
+  "name": "toast",
+  "productName": "Toast",
+  "version": "0.1.0",
+  "description": "A minimal Chromium browser dressed like compact Safari.",
+  "main": "src/main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.4.3"
+  }
+}

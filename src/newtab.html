@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>New Tab</title>
+    <style>
+      * {
+        margin: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        background: #f5f4f2;
+        color: #3a3835;
+      }
+      .wordmark {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 44px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .hint {
+        font-size: 13px;
+        color: #8a8781;
+      }
+      kbd {
+        font: 12px -apple-system, sans-serif;
+        color: #8a8781;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 1px 5px;
+        background: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #242322;
+          color: #e8e6e3;
+        }
+        .hint {
+          color: #8f8c87;
+        }
+        kbd {
+          background: #383736;
+          color: #8f8c87;
+          border-color: rgba(255, 255, 255, 0.14);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wordmark">toast</div>
+    <div class="hint"><kbd>&#8984;L</kbd> to type an address &nbsp;&middot;&nbsp; <kbd>&#8984;T</kbd> new tab &nbsp;&middot;&nbsp; <kbd>&#8679;&#8984;L</kbd> tabs</div>
+  </body>
+</html>
