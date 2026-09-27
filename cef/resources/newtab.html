@@ -22,6 +22,33 @@
         background: #f5f4f2;
         color: #3a3835;
       }
+      /* glassy toast: windowed CEF can't be transparent, so the page
+         fakes liquid glass with a blurred layer of the desktop wallpaper
+         (toast://wallpaper) matching the real glass border */
+      body.glass {
+        background: transparent;
+      }
+      body.glass::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: url('toast://wallpaper/') center / cover no-repeat;
+        filter: blur(48px) saturate(1.6) brightness(1.08);
+        transform: scale(1.15);  /* hide blur edge falloff */
+        z-index: -1;
+      }
+      body.glass::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.28);  /* glass lightening */
+        z-index: -1;
+      }
+      body.glass #bar {
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(24px) saturate(1.4);
+        border-color: rgba(255, 255, 255, 0.45);
+      }
       .wordmark {
         position: absolute;
         top: 39%;
@@ -88,6 +115,19 @@
           background: #242322;
           color: #e8e6e3;
         }
+        body.glass {
+          background: transparent;
+        }
+        body.glass::after {
+          background: rgba(20, 20, 22, 0.3);
+        }
+        body.glass::before {
+          filter: blur(48px) saturate(1.5) brightness(0.9);
+        }
+        body.glass #bar {
+          background: rgba(30, 30, 32, 0.45);
+          border-color: rgba(255, 255, 255, 0.18);
+        }
         #bar {
           background: rgba(255, 255, 255, 0.09);
           border-color: rgba(255, 255, 255, 0.14);
@@ -133,6 +173,7 @@
     <script>
       // window.__toast is injected by toast://config (engine base + name).
       const cfg = window.__toast || { engine: 'https://duckduckgo.com/?q=', engineName: 'DuckDuckGo' };
+      if (cfg.glass) document.body.classList.add('glass');
       const input = document.getElementById('search');
       input.placeholder = `Search with ${cfg.engineName} or type a URL`;
       input.addEventListener('keydown', (e) => {

@@ -11,6 +11,7 @@ namespace {
 std::mutex g_mu;
 std::string g_dir;
 std::string g_engine;  // empty = default
+int g_glass = -1;      // -1 = unread, else 0-100 (0 = plain)
 
 const char* kEngines[][2] = {
     {"google", "https://www.google.com/search?q="},
@@ -30,22 +31,32 @@ std::string SettingsPath() {
   return g_dir + "/settings.txt";
 }
 
-std::string LoadEngineUnlocked() {
-  if (!g_engine.empty()) {
-    return g_engine;
+void LoadUnlocked() {
+  if (g_engine.empty()) {
+    g_engine = "duckduckgo";
+  }
+  if (g_glass < 0) {
+    g_glass = 0;
   }
   std::ifstream f(SettingsPath());
   std::string line;
   while (std::getline(f, line)) {
     if (line.rfind("engine=", 0) == 0) {
       g_engine = line.substr(7);
-      break;
+    } else if (line.rfind("glass=", 0) == 0) {
+      const std::string v = line.substr(6);
+      g_glass = v == "1" ? 100 : std::atoi(v.c_str());
+      if (g_glass < 0 || g_glass > 100) {
+        g_glass = g_glass < 0 ? 0 : 100;
+      }
     }
   }
-  if (g_engine.empty()) {
-    g_engine = "duckduckgo";
-  }
-  return g_engine;
+}
+
+void SaveUnlocked() {
+  std::ofstream f(SettingsPath(), std::ios::trunc);
+  f << "engine=" << g_engine << "\n";
+  f << "glass=" << g_glass << "\n";
 }
 
 const char* Lookup(const char* table[][2], const std::string& id) {
@@ -64,6 +75,11 @@ void SetSettingsDir(const std::string& dir) {
   g_dir = dir;
 }
 
+std::string WallpaperPath() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  return g_dir + "/wallpaper.png";
+}
+
 bool HasCompletedSetup() {
   std::lock_guard<std::mutex> lock(g_mu);
   std::ifstream f(SettingsPath());
@@ -72,17 +88,44 @@ bool HasCompletedSetup() {
 
 std::string SearchEngineId() {
   std::lock_guard<std::mutex> lock(g_mu);
-  return LoadEngineUnlocked();
+  LoadUnlocked();
+  return g_engine;
 }
 
 std::string SearchEngineName() {
   std::lock_guard<std::mutex> lock(g_mu);
-  return Lookup(kEngineNames, LoadEngineUnlocked());
+  LoadUnlocked();
+  return Lookup(kEngineNames, g_engine);
 }
 
 std::string SearchEngineQueryBase() {
   std::lock_guard<std::mutex> lock(g_mu);
-  return Lookup(kEngines, LoadEngineUnlocked());
+  LoadUnlocked();
+  return Lookup(kEngines, g_engine);
+}
+
+bool GlassEnabled() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  LoadUnlocked();
+  return g_glass > 0;
+}
+
+int GlassLevel() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  LoadUnlocked();
+  return g_glass;
+}
+
+void SetGlassLevel(int level) {
+  if (level < 0) {
+    level = 0;
+  } else if (level > 100) {
+    level = 100;
+  }
+  std::lock_guard<std::mutex> lock(g_mu);
+  LoadUnlocked();
+  g_glass = level;
+  SaveUnlocked();
 }
 
 void SetSearchEngine(const std::string& id) {
@@ -97,9 +140,9 @@ void SetSearchEngine(const std::string& id) {
     return;
   }
   std::lock_guard<std::mutex> lock(g_mu);
+  LoadUnlocked();
   g_engine = id;
-  std::ofstream f(SettingsPath(), std::ios::trunc);
-  f << "engine=" << g_engine << "\n";
+  SaveUnlocked();
 }
 
 }  // namespace toast

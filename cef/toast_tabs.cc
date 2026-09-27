@@ -8,6 +8,7 @@
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_task.h"
+#include "include/views/cef_panel.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
@@ -24,10 +25,15 @@ int g_prev_active = -1;
 // top of the z-order via KeepChromeOnTop().
 CefRefPtr<CefBrowserView> g_switcher_view;
 CefRefPtr<CefBrowserView> g_toast_view;
+CefRefPtr<CefView> g_progress_view;
 CefRefPtr<CefClient> g_ui_client;
 bool g_switcher_open = false;
 int g_switcher_sel = -1;
 uint64_t g_toast_gen = 0;
+int g_glass_level = 0;  // 0 = plain, 1-100 = tinted -> liquid
+
+// Page inset while glass mode is on — leaves a glass border around content.
+const int kGlassMargin = 12;
 
 const char kSwitcherURL[] = "toast://switcher/";
 const char kToastURL[] = "toast://dltoast/";
@@ -87,6 +93,45 @@ void ShowActiveOnly() {
   }
 }
 
+CefRect TabBounds(int w, int h) {
+  if (g_glass_level > 0) {
+    const int m = kGlassMargin;
+    return CefRect(m, m, w - 2 * m, h - 2 * m);
+  }
+  return CefRect(0, 0, w, h);
+}
+
+void LayoutTabs(int w, int h) {
+  for (auto& t : g_tabs) {
+    t.view->SetBounds(TabBounds(w, h));
+  }
+}
+
+// Glass needs a live browser to find the NSWindow; before the first one
+// exists the flag alone is stored and applied on RegisterBrowser.
+void ApplyGlassNow() {
+  for (auto& t : g_tabs) {
+    if (t.browser) {
+      PlatformSetGlass(t.browser, g_glass_level);
+      return;
+    }
+  }
+}
+
+// Toggles the transparent-body class on internal pages live.
+void PushGlassToPages() {
+  const char* js = g_glass_level > 0
+      ? "document.body&&document.body.classList.add('glass')"
+      : "document.body&&document.body.classList.remove('glass')";
+  for (auto& t : g_tabs) {
+    if (t.browser && t.browser->GetMainFrame() &&
+        t.browser->GetMainFrame()->GetURL().ToString().rfind("toast://", 0) ==
+            0) {
+      t.browser->GetMainFrame()->ExecuteJavaScript(js, "toast://glass", 0);
+    }
+  }
+}
+
 void LayoutSwitcher() {
   if (!g_switcher_view || !g_window || !g_switcher_view->IsVisible()) {
     return;
@@ -128,6 +173,9 @@ void KeepChromeOnTop() {
     return;
   }
   const int top = (int)g_window->GetChildViewCount() - 1;
+  if (g_progress_view) {
+    g_window->ReorderChildView(g_progress_view, top);
+  }
   if (g_switcher_view) {
     g_window->ReorderChildView(g_switcher_view, top);
   }
@@ -148,6 +196,7 @@ void DetachWindow() {
   g_active = g_prev_active = -1;
   g_switcher_view = nullptr;
   g_toast_view = nullptr;
+  g_progress_view = nullptr;
   g_ui_client = nullptr;
   g_switcher_open = false;
 }
@@ -158,9 +207,10 @@ void AddTabView(CefRefPtr<CefWindow> window, CefRefPtr<CefBrowserView> view,
   g_tabs.push_back(t);
   g_active = (int)g_tabs.size() - 1;
 
+  view->SetBackgroundColor(CefColorSetARGB(0, 0, 0, 0));
   window->AddChildView(view);
   CefSize s = window->GetSize();
-  view->SetBounds(CefRect(0, 0, s.width, s.height));
+  view->SetBounds(TabBounds(s.width, s.height));
   KeepChromeOnTop();
 
   ShowActiveOnly();
@@ -170,11 +220,44 @@ void AddTabView(CefRefPtr<CefWindow> window, CefRefPtr<CefBrowserView> view,
 }
 
 void ResizeTabViews(int width, int height) {
-  for (auto& t : g_tabs) {
-    t.view->SetBounds(CefRect(0, 0, width, height));
-  }
+  LayoutTabs(width, height);
   LayoutSwitcher();
   LayoutToast();
+}
+
+void EnsureProgress() {
+  if (g_progress_view || !g_window) {
+    return;
+  }
+  g_progress_view = CefPanel::CreatePanel(nullptr);
+  // System blue, 3px tall strip pinned to the top edge.
+  g_progress_view->SetBackgroundColor(CefColorSetARGB(255, 10, 132, 255));
+  g_window->AddChildView(g_progress_view);
+  g_progress_view->SetVisible(false);
+  KeepChromeOnTop();
+}
+
+void LoadingProgress(CefRefPtr<CefBrowser> browser, float progress) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!g_window || !browser ||
+      (g_active >= 0 && g_active < (int)g_tabs.size() &&
+       g_tabs[g_active].browser &&
+       !g_tabs[g_active].browser->IsSame(browser))) {
+    return;  // background tab loading — bar tracks the visible tab only
+  }
+  EnsureProgress();
+  if (!g_progress_view) {
+    return;
+  }
+  if (progress >= 1.0f || progress <= 0.0f) {
+    g_progress_view->SetVisible(false);
+    return;
+  }
+  KeepChromeOnTop();
+  const int w = g_window->GetBounds().width;
+  g_progress_view->SetBounds(
+      CefRect(0, 0, (int)(w * progress), 3));
+  g_progress_view->SetVisible(true);
 }
 
 void EnsureSwitcher(CefRefPtr<CefClient> client,
@@ -201,6 +284,8 @@ void EnsureSwitcher(CefRefPtr<CefClient> client,
       new AlloyViewDelegate);
   g_window->AddChildView(g_toast_view);
   g_toast_view->SetVisible(false);
+
+  EnsureProgress();
 }
 
 void NewTab(const CefString& url, CefRefPtr<CefClient> client,
@@ -209,6 +294,8 @@ void NewTab(const CefString& url, CefRefPtr<CefClient> client,
     return;
   }
   CefBrowserSettings settings;
+  // Transparent backing so toast:// pages can show the window glass.
+  settings.background_color = CefColorSetARGB(0, 0, 0, 0);
   CefRefPtr<CefBrowserView> view = CefBrowserView::CreateBrowserView(
       client, url, settings, nullptr, nullptr, new AlloyViewDelegate);
   AddTabView(g_window, view, view->GetBrowser());
@@ -219,9 +306,19 @@ void CloseActiveTab() {
     return;
   }
   CefRefPtr<CefBrowser> b = g_tabs[g_active].browser;
-  if (b) {
-    b->GetHost()->CloseBrowser(true);
+  if (!b) {
+    return;
   }
+  if (g_tabs.size() == 1) {
+    // Last tab — don't close the window, reset it to the new-tab page.
+    b->GetMainFrame()->LoadURL("toast://newtab/");
+    g_tabs[g_active].title = "New Tab";
+    if (g_window) {
+      g_window->SetTitle("New Tab");
+    }
+    return;
+  }
+  b->GetHost()->CloseBrowser(true);
 }
 
 void ActivateTab(int index) {
@@ -251,6 +348,9 @@ void RegisterBrowser(CefRefPtr<CefBrowser> browser,
     if (t.view && t.view->GetBrowser() &&
         t.view->GetBrowser()->IsSame(browser)) {
       t.browser = browser;
+      if (g_glass_level > 0) {
+        PlatformSetGlass(browser, g_glass_level);
+      }
       return;
     }
   }
@@ -318,6 +418,32 @@ void SwitcherStep(int delta) {
 
 bool SwitcherOpen() {
   return g_switcher_open;
+}
+
+void SetGlassMode(int level) {
+  CEF_REQUIRE_UI_THREAD();
+  if (level < 0) {
+    level = 0;
+  } else if (level > 100) {
+    level = 100;
+  }
+  const bool was_off = g_glass_level == 0;
+  g_glass_level = level;
+  if (!g_window) {
+    return;
+  }
+  CefSize s = g_window->GetSize();
+  LayoutTabs(s.width, s.height);
+  ApplyGlassNow();
+  PushGlassToPages();
+  if (was_off != (level == 0)) {
+    LayoutSwitcher();
+    LayoutToast();
+  }
+}
+
+bool IsGlassMode() {
+  return g_glass_level > 0;
 }
 
 void ShowToast(const std::string& msg, const std::string& kind) {

@@ -42,6 +42,8 @@ class ToastWindowDelegate : public CefWindowDelegate {
     if (client_) {
       toast::CreateOverlayIfNeeded(window, client_, runtime_style_);
     }
+    // Persisted look — applied natively once the first browser exists.
+    toast::SetGlassMode(toast::GlassLevel());
   }
 
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
@@ -95,7 +97,6 @@ class ToastBrowserViewDelegate : public CefBrowserViewDelegate {
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
                                  CefRefPtr<CefBrowserView> popup_browser_view,
                                  bool is_devtools) override {
-    fprintf(stderr, "TOASTDBG OnPopupBrowserViewCreated devtools=%d\n", is_devtools);
     CefWindow::CreateTopLevelWindow(new ToastWindowDelegate(
         popup_browser_view, runtime_style_, CEF_SHOW_STATE_NORMAL));
     return true;
@@ -154,6 +155,8 @@ void ToastApp::OnContextInitialized() {
   CefRefPtr<ToastHandler> handler(new ToastHandler(use_alloy_style));
 
   CefBrowserSettings browser_settings;
+  // Transparent backing so toast:// pages can show the window glass.
+  browser_settings.background_color = CefColorSetARGB(0, 0, 0, 0);
 
   std::string url = command_line->GetSwitchValue("url");
   if (url.empty()) {

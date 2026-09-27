@@ -52,8 +52,23 @@ CefRefPtr<CefWindow> MainWindow();
 // kind: "start" | "done" | "fail"
 void ShowToast(const std::string& msg, const std::string& kind);
 
+// Top-edge loading bar driven by CefDisplayHandler::OnLoadingProgressChange.
+void LoadingProgress(CefRefPtr<CefBrowser> browser, float progress);
+
 // Called from the client's display handler to keep chip titles fresh.
 void NoteTitle(CefRefPtr<CefBrowser> browser, const std::string& title);
+
+// Liquid-glass window mode — applies the native backdrop, insets tab
+// views and makes toast:// pages transparent. level 0-100, 0 = plain.
+// UI thread only.
+void SetGlassMode(int level);
+bool IsGlassMode();
+
+// Implemented per-platform (toast_handler_mac.mm). Retries briefly while
+// the browser's view attaches to its window.
+void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
+                      int level,
+                      int retries_left = 20);
 
 CefRefPtr<CefBrowser> ActiveBrowser();
 

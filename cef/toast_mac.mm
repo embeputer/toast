@@ -9,6 +9,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_library_loader.h"
 #include "tests/ceftoast/toast_app.h"
+#include "tests/ceftoast/toast_tabs.h"
 #include "tests/ceftoast/toast_handler.h"
 #include "tests/ceftoast/toast_settings.h"
 
@@ -34,6 +35,15 @@
 
 - (void)sendEvent:(NSEvent*)event {
   CefScopedSendingEvent sendingEventScoper;
+  // ⌘W must reach CEF's key handler (close tab), not the main menu's
+  // performClose: (close window). Menu key-equivalents run inside
+  // [super sendEvent:], so intercept before it.
+  if (event.type == NSEventTypeKeyDown &&
+      (event.modifierFlags & NSEventModifierFlagCommand) &&
+      [[event charactersIgnoringModifiers] isEqualToString:@"w"]) {
+    toast::CloseActiveTab();
+    return;
+  }
   [super sendEvent:event];
 }
 
@@ -111,6 +121,26 @@ int main(int argc, char* argv[]) {
         stringByAppendingPathComponent:@"Library/Application Support/toast"];
     CefString(&settings.root_cache_path) = [cacheDir UTF8String];
     toast::SetSettingsDir([cacheDir UTF8String]);
+
+    // Snapshot the desktop wallpaper for the glassy new-tab background
+    // (windowed CEF can't composite real transparency, so the page fakes
+    // glass with a blurred wallpaper layer).
+    NSURL* wallURL = [[NSWorkspace sharedWorkspace]
+        desktopImageURLForScreen:[NSScreen mainScreen]];
+    if (wallURL) {
+      NSImage* wall = [[NSImage alloc] initWithContentsOfURL:wallURL];
+      NSData* tiff = [wall TIFFRepresentation];
+      if (tiff) {
+        NSBitmapImageRep* rep =
+            [NSBitmapImageRep imageRepWithData:tiff];
+        NSData* png =
+            [rep representationUsingType:NSBitmapImageFileTypePNG
+                              properties:@{}];
+        NSString* wallOut =
+            [cacheDir stringByAppendingPathComponent:@"wallpaper.png"];
+        [png writeToFile:wallOut atomically:YES];
+      }
+    }
 
     CefRefPtr<ToastApp> app(new ToastApp("toast://newtab/", ResourcesDir()));
 

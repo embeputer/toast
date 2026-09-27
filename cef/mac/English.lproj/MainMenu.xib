@@ -86,7 +86,8 @@
                             <menuItem isSeparatorItem="YES" id="79" userLabel="7">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Close" keyEquivalent="w" id="73" userLabel="1">
+                            <menuItem title="Close Window" keyEquivalent="W" id="73" userLabel="1">
+                                <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
                                 <connections>
                                     <action selector="performClose:" target="-1" id="193"/>
                                 </connections>
@@ -261,7 +262,7 @@
                 <menuItem title="Format" id="299">
                     <menu key="submenu" title="Format" id="300">
                         <items>
-                            <menuItem title="Show Fonts" keyEquivalent="t" id="344"/>
+                            <menuItem title="Show Fonts" id="344"/>
                             <menuItem title="Show Colors" keyEquivalent="C" id="345">
                                 <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
                                 <connections>

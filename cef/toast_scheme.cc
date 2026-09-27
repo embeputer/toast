@@ -5,12 +5,17 @@
 #include <sstream>
 #include <string>
 
+#include "include/base/cef_bind.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_parser.h"
 #include "include/cef_request.h"
+#include "include/cef_task.h"
 #include "include/cef_version.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_stream_resource_handler.h"
 #include "tests/ceftoast/toast_downloads.h"
 #include "tests/ceftoast/toast_settings.h"
+#include "tests/ceftoast/toast_tabs.h"
 
 namespace {
 
@@ -63,7 +68,9 @@ std::string DownloadsPage() {
 std::string ConfigJs() {
   std::stringstream ss;
   ss << "window.__toast={engine:\"" << toast::SearchEngineQueryBase()
-     << "\",engineName:\"" << toast::SearchEngineName() << "\"};";
+     << "\",engineName:\"" << toast::SearchEngineName() << "\",glass:"
+     << (toast::GlassEnabled() ? "true" : "false")
+     << ",glassLevel:" << toast::GlassLevel() << "};";
   return ss.str();
 }
 
@@ -113,7 +120,29 @@ std::string SettingsPage() {
        << "\" href=\"toast://pickengine?e=" << e.id << "\">" << e.name
        << (e.id == cur ? "<span>✓</span>" : "<span>→</span>") << "</a>";
   }
-  ss << "</div>";
+  const int glass = toast::GlassLevel();
+  ss << "</div>"
+        "<h2 style=\"font-size:15px;margin-top:28px\">Window style</h2>"
+        "<div class=\"engines\">"
+        "<a class=\"engine" << (glass == 0 ? " cur" : "")
+     << "\" href=\"toast://pickglass?v=0\">Plain toast"
+     << (glass == 0 ? "<span>✓</span>" : "<span>→</span>") << "</a>"
+        "<a class=\"engine" << (glass > 0 ? " cur" : "")
+     << "\" href=\"toast://pickglass?v="
+     << (glass > 0 ? glass : 100) << "\">Glassy toast"
+     << (glass > 0 ? "<span>✓</span>" : "<span>→</span>") << "</a>"
+        "</div>"
+        "<div style=\"max-width:320px;margin-top:6px;display:"
+     << (glass > 0 ? "block" : "none") << "\" id=\"glassrow\">"
+        "<label style=\"font-size:12px;opacity:.6;display:flex;"
+        "justify-content:space-between\"><span>tinted</span>"
+        "<span>liquid</span></label>"
+        "<input type=\"range\" min=\"10\" max=\"100\" value=\"" << glass
+     << "\" style=\"width:100%\" "
+        "oninput=\"gout.value=this.value\" "
+        "onchange=\"location='toast://pickglass?v='+this.value\">"
+        "<output id=\"gout\" style=\"font-size:11px;opacity:.55\">" << glass
+     << "</output></div>";
   return WrapPage("toast://settings", ss.str());
 }
 
@@ -158,6 +187,14 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
                                 "<p>" + host +
                                     ".html missing from bundle.</p>"));
   }
+  if (host == "wallpaper") {
+    CefRefPtr<CefStreamReader> stream =
+        CefStreamReader::CreateForFile(toast::WallpaperPath());
+    if (stream) {
+      return new CefStreamResourceHandler("image/png", stream);
+    }
+    return nullptr;
+  }
   if (host == "config") {
     const std::string js = ConfigJs();
     auto stream = CefStreamReader::CreateForData(
@@ -167,6 +204,14 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
   if (host == "pickengine") {
     toast::SetSearchEngine(QueryParam(CefString(&parts.query), "e"));
     return HtmlHandler(RedirectPage("toast://newtab/"));
+  }
+  if (host == "pickglass") {
+    const int level = std::atoi(
+        QueryParam(CefString(&parts.query), "v").c_str());
+    toast::SetGlassLevel(level);
+    CefPostTask(TID_UI,
+                base::BindOnce(&toast::SetGlassMode, toast::GlassLevel()));
+    return HtmlHandler(RedirectPage("toast://settings"));
   }
   if (host == "settings") {
     return HtmlHandler(SettingsPage());

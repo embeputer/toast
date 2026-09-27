@@ -66,6 +66,12 @@ void ToastHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
   }
 }
 
+void ToastHandler::OnLoadingProgressChange(CefRefPtr<CefBrowser> browser,
+                                           double progress) {
+  CEF_REQUIRE_UI_THREAD();
+  toast::LoadingProgress(browser, (float)progress);
+}
+
 bool ToastHandler::OnBeforeDownload(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefDownloadItem> download_item,

@@ -33,6 +33,8 @@ class ToastHandler : public CefClient,
   // CefDisplayHandler methods:
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
+  void OnLoadingProgressChange(CefRefPtr<CefBrowser> browser,
+                               double progress) override;
 
   // CefDownloadHandler methods:
   bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
