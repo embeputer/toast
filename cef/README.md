@@ -1,15 +1,15 @@
-# toast on CEF (`ceftoast`)
+# toast
 
-A spike of toast built directly on the [Chromium Embedded Framework](https://bitbucket.org/chromiumembedded/cef) —
-real Chromium, including its multi-process model, helper app bundles, and the
-Chrome-runtime window style. This is the candidate path for replacing the
-Electron shell on `main`.
+toast's browser, built on the [Chromium Embedded Framework](https://bitbucket.org/chromiumembedded/cef) —
+real Chromium, including its multi-process model and helper app bundles, in an
+Alloy-runtime Views window with no native Chrome UI.
 
 ## Status
 
-Minimal but real: an actual CEF browser window (Views-hosted, Chrome runtime
-style) that opens on our bundled new-tab page (`src/newtab.html`, shared with
-the Electron app). App name, icon, and bundle id are toast's.
+Shipping on `main`: bare window (no title bar), `toast://` internal pages
+(newtab, settings, downloads, switcher HUD, download toast), per-tab ⌘W,
+⌃Tab switcher, top loading bar, plain/glassy window modes with a real
+`NSGlassEffectView` liquid-glass border.
 
 ## Build
 
