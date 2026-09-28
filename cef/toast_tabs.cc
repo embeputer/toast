@@ -11,6 +11,7 @@
 #include "include/views/cef_panel.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "tests/ceftoast/toast_updater.h"
 
 namespace toast {
 namespace {
@@ -193,6 +194,10 @@ void KeepChromeOnTop() {
 void AttachWindow(CefRefPtr<CefWindow> window) {
   g_window = window;
   PlatformHideTitlebar(window);
+  // Quiet update check shortly after launch — installs itself and
+  // restarts when a newer GitHub release exists.
+  CefPostDelayedTask(TID_UI,
+                     base::BindOnce(&toast::CheckForUpdate, false), 4000);
 }
 
 void DetachWindow() {

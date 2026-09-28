@@ -16,6 +16,7 @@
 #include "tests/ceftoast/toast_downloads.h"
 #include "tests/ceftoast/toast_settings.h"
 #include "tests/ceftoast/toast_tabs.h"
+#include "tests/ceftoast/toast_updater.h"
 
 namespace {
 
@@ -51,7 +52,7 @@ std::string WrapPage(const std::string& title, const std::string& body) {
 std::string VersionPage() {
   std::stringstream ss;
   ss << "<table>"
-     << "<tr><td>Toast</td><td>ceftoast spike</td></tr>"
+     << "<tr><td>Toast</td><td>" << toast::ToastVersion() << "</td></tr>"
      << "<tr><td>CEF</td><td>" << CEF_VERSION << "</td></tr>"
      << "<tr><td>Chromium</td><td>" << CHROME_VERSION_MAJOR << "."
      << CHROME_VERSION_MINOR << "." << CHROME_VERSION_BUILD << "."
@@ -143,6 +144,11 @@ std::string SettingsPage() {
         "onchange=\"location='toast://pickglass?v='+this.value\">"
         "<output id=\"gout\" style=\"font-size:11px;opacity:.55\">" << glass
      << "</output></div>"
+        "<h2 style=\"font-size:15px;margin-top:28px\">Updates</h2>"
+        "<div class=\"engines\">"
+        "<a class=\"engine\" href=\"toast://update\">toast "
+     << toast::ToastVersion()
+     << " — check for updates<span>→</span></a></div>"
         "<p style=\"font-size:11px;opacity:.45;margin-top:20px\">glass "
         "backing: " << toast::PlatformGlassBackend()
      << "</p>";
@@ -214,6 +220,10 @@ CefRefPtr<CefResourceHandler> ToastSchemeHandlerFactory::Create(
     toast::SetGlassLevel(level);
     CefPostTask(TID_UI,
                 base::BindOnce(&toast::SetGlassMode, toast::GlassLevel()));
+    return HtmlHandler(RedirectPage("toast://settings"));
+  }
+  if (host == "update") {
+    toast::CheckForUpdate(/*interactive=*/true);
     return HtmlHandler(RedirectPage("toast://settings"));
   }
   if (host == "settings") {

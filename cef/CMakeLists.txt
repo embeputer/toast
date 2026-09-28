@@ -20,10 +20,12 @@ set(TOAST_SRCS
   toast_settings.h
   toast_tabs.cc
   toast_tabs.h
+  toast_updater.h
   )
 set(TOAST_SRCS_MAC
   toast_mac.mm
   toast_handler_mac.mm
+  toast_updater.mm
   )
 APPEND_PLATFORM_SOURCES(TOAST_SRCS)
 source_group(ceftoast FILES ${TOAST_SRCS})
