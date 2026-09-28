@@ -70,6 +70,11 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
                       int level,
                       int retries_left = 20);
 
+// Hides the title bar entirely (transparent + full-size content) so the
+// window is all content under the traffic lights. Retries until the
+// platform window exists.
+void PlatformHideTitlebar(CefRefPtr<CefWindow> window, int retries_left = 20);
+
 CefRefPtr<CefBrowser> ActiveBrowser();
 
 }  // namespace toast

@@ -92,16 +92,40 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
     content.layer.cornerRadius = 18.0;
     content.layer.masksToBounds = YES;
   } else {
+    // Plain toast: opaque window with a solid border edge around the
+    // inset page, same rounded shape as glass mode.
     if (g_glass_view) {
       g_glass_view.hidden = YES;
     }
-    if (content.layer) {
-      content.layer.cornerRadius = 0;
-      content.layer.masksToBounds = NO;
-    }
     win.opaque = YES;
     win.backgroundColor = [NSColor windowBackgroundColor];
+    content.wantsLayer = YES;
+    content.layer.cornerRadius = 18.0;
+    content.layer.masksToBounds = YES;
   }
+}
+
+void PlatformHideTitlebar(CefRefPtr<CefWindow> window, int retries_left) {
+  if (!window) {
+    return;
+  }
+  NSView* view = CAST_CEF_WINDOW_HANDLE_TO_NSVIEW(window->GetWindowHandle());
+  NSWindow* win = [view window];
+  if (!win) {
+    if (retries_left > 0) {
+      CefPostDelayedTask(TID_UI,
+                         base::BindOnce(&PlatformHideTitlebar, window,
+                                        retries_left - 1),
+                         100);
+    }
+    return;
+  }
+  // No visible title bar: transparent chrome + content underlapping the
+  // frame, so the page (and the plain/glass border) fills the window.
+  win.titleVisibility = NSWindowTitleHidden;
+  win.titlebarAppearsTransparent = YES;
+  win.styleMask |= NSWindowStyleMaskFullSizeContentView;
+  win.movableByWindowBackground = YES;
 }
 
 }  // namespace toast
@@ -120,5 +144,11 @@ void ToastHandler::PlatformTitleChange(CefRefPtr<CefBrowser> browser,
 
 void ToastHandler::PlatformShowWindow(CefRefPtr<CefBrowser> browser) {
   NSWindow* window = GetNSWindowForBrowser(browser);
+  // No visible title bar: transparent chrome + content underlapping the
+  // frame, so the page fills the window under just the traffic lights.
+  window.titleVisibility = NSWindowTitleHidden;
+  window.titlebarAppearsTransparent = YES;
+  window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+  window.movableByWindowBackground = YES;
   [window makeKeyAndOrderFront:window];
 }

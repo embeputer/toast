@@ -36,8 +36,9 @@ int g_switcher_sel = -1;
 uint64_t g_toast_gen = 0;
 int g_glass_level = 0;  // 0 = plain, 1-100 = tinted -> liquid
 
-// Page inset while glass mode is on — leaves a glass border around content.
-const int kGlassMargin = 12;
+// Page inset — leaves a border around content in both modes: liquid glass
+// when glassy, a plain window-colored edge when plain.
+const int kBorderMargin = 12;
 
 const char kSwitcherURL[] = "toast://switcher/";
 const char kToastURL[] = "toast://dltoast/";
@@ -98,11 +99,8 @@ void ShowActiveOnly() {
 }
 
 CefRect TabBounds(int w, int h) {
-  if (g_glass_level > 0) {
-    const int m = kGlassMargin;
-    return CefRect(m, m, w - 2 * m, h - 2 * m);
-  }
-  return CefRect(0, 0, w, h);
+  const int m = kBorderMargin;
+  return CefRect(m, m, w - 2 * m, h - 2 * m);
 }
 
 void LayoutTabs(int w, int h) {
@@ -192,6 +190,7 @@ void KeepChromeOnTop() {
 
 void AttachWindow(CefRefPtr<CefWindow> window) {
   g_window = window;
+  PlatformHideTitlebar(window);
 }
 
 void DetachWindow() {
@@ -378,9 +377,7 @@ void RegisterBrowser(CefRefPtr<CefBrowser> browser,
     if (t.view && t.view->GetBrowser() &&
         t.view->GetBrowser()->IsSame(browser)) {
       t.browser = browser;
-      if (g_glass_level > 0) {
-        PlatformSetGlass(browser, g_glass_level);
-      }
+      PlatformSetGlass(browser, g_glass_level);
       return;
     }
   }
