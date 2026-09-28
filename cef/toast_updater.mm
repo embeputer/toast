@@ -24,7 +24,7 @@ namespace {
 
 const char* kVersion = "0.2.0";
 const char* kLatestRelease =
-    "https://api.github.com/repos/embeputer/toast/releases/latest";
+    "https://toast-feed-yzbmoxbb.devinapps.com/latest.json";
 const char* kDmgPath = "/tmp/toast-update.dmg";
 const char* kSwapScript = "/tmp/toast-update.sh";
 
