@@ -68,7 +68,10 @@ bool IsGlassMode();
 // the browser's view attaches to its window.
 void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
                       int level,
-                      int retries_left = 20);
+                      int retries_left = 40);
+
+// Which glass backing was applied — for the toast://settings diagnostic.
+const char* PlatformGlassBackend();
 
 // Hides the title bar entirely (transparent + full-size content) so the
 // window is all content under the traffic lights. Retries until the

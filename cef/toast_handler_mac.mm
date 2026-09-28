@@ -20,6 +20,7 @@ NSWindow* GetNSWindowForBrowser(CefRefPtr<CefBrowser> browser) {
 }
 
 NSView* g_glass_view = nil;
+const char* g_glass_backend = "pending";  // diagnostic for toast://settings
 
 }  // namespace
 
@@ -52,18 +53,24 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
   if (level > 0) {
     if (!g_glass_view) {
       Class glassCls = NSClassFromString(@"NSGlassEffectView");
-      NSView* glass;
+      NSView* glass = nil;
       if (glassCls) {
-        glass = [[glassCls alloc] init];
+        glass = [[glassCls alloc] initWithFrame:content.bounds];
+      }
+      if (glass) {
+        g_glass_backend = "NSGlassEffectView";
       } else {
-        NSVisualEffectView* vev = [[NSVisualEffectView alloc] init];
+        NSVisualEffectView* vev =
+            [[NSVisualEffectView alloc] initWithFrame:content.bounds];
         vev.material = NSVisualEffectMaterialUnderWindowBackground;
         vev.blendingMode = NSVisualEffectBlendingModeBehindWindow;
         vev.state = NSVisualEffectStateActive;
         glass = vev;
+        g_glass_backend = "NSVisualEffectView (fallback)";
       }
       glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
       g_glass_view = glass;
+      NSLog(@"toast: glass backing = %s", g_glass_backend);
     }
     if (g_glass_view.superview != content) {
       g_glass_view.frame = content.bounds;
@@ -71,26 +78,35 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
                positioned:NSWindowBelow
                relativeTo:nil];
     }
-    // Tinted -> liquid: fill fades out as the level rises, and the top
-    // end flips NSGlassEffectView to its clear (fully liquid) style.
-    const CGFloat tint = (100.0 - level) / 100.0 * 0.45;
-    if ([g_glass_view respondsToSelector:@selector(setTintColor:)]) {
-      [g_glass_view setValue:[NSColor colorWithWhite:1.0 alpha:tint]
-                    forKey:@"tintColor"];
-    }
-    if ([g_glass_view respondsToSelector:@selector(setStyle:)]) {
-      // NSGlassEffectViewStyle: 0 regular (tinted), 1 clear (liquid).
-      [g_glass_view setValue:@(level >= 80 ? 1 : 0) forKey:@"style"];
-    }
-    if ([g_glass_view isKindOfClass:[NSVisualEffectView class]]) {
-      [(NSVisualEffectView*)g_glass_view setAlphaValue:0.45 + 0.55 * (level / 100.0)];
-    }
     g_glass_view.hidden = NO;
+    // Transparent window FIRST — if any of the glass tuning below throws
+    // on a newer macOS, the border must still not fall back to opaque
+    // white.
     win.opaque = NO;
     win.backgroundColor = [NSColor clearColor];
     content.wantsLayer = YES;
     content.layer.cornerRadius = 18.0;
     content.layer.masksToBounds = YES;
+    @try {
+      // Tinted -> liquid: fill fades out as the level rises, and the top
+      // end flips NSGlassEffectView to its clear (fully liquid) style.
+      const CGFloat tint = (100.0 - level) / 100.0 * 0.45;
+      if ([g_glass_view respondsToSelector:@selector(setTintColor:)]) {
+        [g_glass_view setValue:[NSColor colorWithWhite:1.0 alpha:tint]
+                        forKey:@"tintColor"];
+      }
+      if ([g_glass_view respondsToSelector:@selector(setStyle:)]) {
+        // NSGlassEffectViewStyle: 0 regular (tinted), 1 clear (liquid).
+        [g_glass_view setValue:@(level >= 80 ? 1 : 0) forKey:@"style"];
+      }
+      if ([g_glass_view isKindOfClass:[NSVisualEffectView class]]) {
+        [(NSVisualEffectView*)g_glass_view
+            setAlphaValue:0.45 + 0.55 * (level / 100.0)];
+      }
+    } @catch (NSException* e) {
+      g_glass_backend = "NSGlassEffectView (config failed)";
+      NSLog(@"toast: glass config threw: %@", e);
+    }
   } else {
     // Plain toast: opaque window with a solid border edge around the
     // inset page, same rounded shape as glass mode.
@@ -126,6 +142,10 @@ void PlatformHideTitlebar(CefRefPtr<CefWindow> window, int retries_left) {
   win.titlebarAppearsTransparent = YES;
   win.styleMask |= NSWindowStyleMaskFullSizeContentView;
   win.movableByWindowBackground = YES;
+}
+
+const char* PlatformGlassBackend() {
+  return g_glass_backend;
 }
 
 void PlatformRoundView(CefRefPtr<CefBrowser> browser, double radius) {

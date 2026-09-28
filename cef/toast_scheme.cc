@@ -142,7 +142,10 @@ std::string SettingsPage() {
         "oninput=\"gout.value=this.value\" "
         "onchange=\"location='toast://pickglass?v='+this.value\">"
         "<output id=\"gout\" style=\"font-size:11px;opacity:.55\">" << glass
-     << "</output></div>";
+     << "</output></div>"
+        "<p style=\"font-size:11px;opacity:.45;margin-top:20px\">glass "
+        "backing: " << toast::PlatformGlassBackend()
+     << "</p>";
   return WrapPage("toast://settings", ss.str());
 }
 

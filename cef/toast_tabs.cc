@@ -39,8 +39,8 @@ int g_glass_level = 0;  // 0 = plain, 1-100 = tinted -> liquid
 // Page inset — leaves a border around content in both modes: liquid glass
 // when glassy, a plain window-colored edge when plain. The top inset is
 // taller so the traffic lights sit inside it like a slim chrome band.
-const int kBorderMargin = 12;
-const int kTopMargin = 40;
+const int kBorderMargin = 8;
+const int kTopMargin = 30;
 
 const char kSwitcherURL[] = "toast://switcher/";
 const char kToastURL[] = "toast://dltoast/";
