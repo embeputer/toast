@@ -59,6 +59,18 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
       }
       if (glass) {
         g_glass_backend = "NSGlassEffectView";
+        @try {
+          // Documented pattern: the glass embeds a contentView. On macOS
+          // 27 an empty NSGlassEffectView draws nothing, so give it a
+          // transparent content view spanning its bounds.
+          NSView* embedded =
+              [[NSView alloc] initWithFrame:glass.bounds];
+          embedded.autoresizingMask =
+              NSViewWidthSizable | NSViewHeightSizable;
+          [glass setValue:embedded forKey:@"contentView"];
+        } @catch (NSException* e) {
+          NSLog(@"toast: glass contentView embed failed: %@", e);
+        }
       } else {
         NSVisualEffectView* vev =
             [[NSVisualEffectView alloc] initWithFrame:content.bounds];
