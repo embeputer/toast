@@ -128,6 +128,17 @@ void PlatformHideTitlebar(CefRefPtr<CefWindow> window, int retries_left) {
   win.movableByWindowBackground = YES;
 }
 
+void PlatformRoundView(CefRefPtr<CefBrowser> browser, double radius) {
+  if (!browser) {
+    return;
+  }
+  NSView* view =
+      CAST_CEF_WINDOW_HANDLE_TO_NSVIEW(browser->GetHost()->GetWindowHandle());
+  view.wantsLayer = YES;
+  view.layer.cornerRadius = radius;
+  view.layer.masksToBounds = YES;
+}
+
 }  // namespace toast
 
 void ToastHandler::PlatformInstallHooks() {

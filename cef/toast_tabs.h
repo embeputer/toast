@@ -75,6 +75,10 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
 // platform window exists.
 void PlatformHideTitlebar(CefRefPtr<CefWindow> window, int retries_left = 20);
 
+// Rounds the browser's native view (HUD overlays) with a real layer
+// corner radius — actual clipped corners, not CSS painted ones.
+void PlatformRoundView(CefRefPtr<CefBrowser> browser, double radius);
+
 CefRefPtr<CefBrowser> ActiveBrowser();
 
 }  // namespace toast

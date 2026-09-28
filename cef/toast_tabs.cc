@@ -37,8 +37,10 @@ uint64_t g_toast_gen = 0;
 int g_glass_level = 0;  // 0 = plain, 1-100 = tinted -> liquid
 
 // Page inset — leaves a border around content in both modes: liquid glass
-// when glassy, a plain window-colored edge when plain.
+// when glassy, a plain window-colored edge when plain. The top inset is
+// taller so the traffic lights sit inside it like a slim chrome band.
 const int kBorderMargin = 12;
+const int kTopMargin = 40;
 
 const char kSwitcherURL[] = "toast://switcher/";
 const char kToastURL[] = "toast://dltoast/";
@@ -100,7 +102,7 @@ void ShowActiveOnly() {
 
 CefRect TabBounds(int w, int h) {
   const int m = kBorderMargin;
-  return CefRect(m, m, w - 2 * m, h - 2 * m);
+  return CefRect(m, kTopMargin, w - 2 * m, h - kTopMargin - m);
 }
 
 void LayoutTabs(int w, int h) {
@@ -381,7 +383,11 @@ void RegisterBrowser(CefRefPtr<CefBrowser> browser,
       return;
     }
   }
-  // Overlay or popup browser — not a tab.
+  // Overlay or popup browser — not a tab. Round the HUD views natively so
+  // their edges are real rounded corners, not painted-on transparency.
+  if (view == g_switcher_view || view == g_toast_view) {
+    PlatformRoundView(browser, 16.0);
+  }
   (void)view;
 }
 

@@ -14,11 +14,9 @@
   #toast {
     display: flex; align-items: center; gap: 10px;
     padding: 12px 18px; border-radius: 16px;
-    background: rgba(242,242,246,0.55);
-    backdrop-filter: blur(32px) saturate(1.8);
-    -webkit-backdrop-filter: blur(32px) saturate(1.8);
-    border: 0.5px solid rgba(255,255,255,0.45);
-    box-shadow: 0 12px 40px rgba(0,0,0,0.20), 0 2px 6px rgba(0,0,0,0.08);
+    background: #ededf1;
+    border: 0.5px solid rgba(0,0,0,0.16);
+    box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
     font-size: 13px; font-weight: 500; color: #1d1d1f;
     max-width: 420px;
     opacity: 0; transform: translateY(10px);
@@ -28,7 +26,7 @@
   #icon { font-size: 15px; }
   #msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   @media (prefers-color-scheme: dark) {
-    #toast { background: rgba(30,30,32,0.62);
+    #toast { background: #232326;
              border-color: rgba(255,255,255,0.16); color: #f2f2f7; }
   }
 </style>

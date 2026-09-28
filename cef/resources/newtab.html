@@ -22,20 +22,11 @@
         background: #f5f4f2;
         color: #3a3835;
       }
-      /* glassy toast: windowed CEF can't be transparent, so the page
-         fakes liquid glass with a blurred layer of the desktop wallpaper
-         (toast://wallpaper) matching the real glass border */
+      /* glassy toast: the webview really is transparent (alpha-0 browser
+         background), so a clear page shows the actual NSGlassEffectView
+         behind the window — no fake wallpaper image */
       body.glass {
         background: transparent;
-      }
-      body.glass::before {
-        content: '';
-        position: fixed;
-        inset: 0;
-        background: url('toast://wallpaper/') center / cover no-repeat;
-        filter: blur(48px) saturate(1.6) brightness(1.08);
-        transform: scale(1.15);  /* hide blur edge falloff */
-        z-index: -1;
       }
       /* milky pane: mostly-white frosted layer over the wallpaper blur,
          so the webview reads as a white glass pane inside the liquid
@@ -111,9 +102,6 @@
           box-shadow:
             inset 0 0 0 1px rgba(255, 255, 255, 0.14),
             inset 0 1px 0 rgba(255, 255, 255, 0.18);
-        }
-        body.glass::before {
-          filter: blur(48px) saturate(1.5) brightness(0.9);
         }
         body.glass #bar {
           background: rgba(30, 30, 32, 0.45);
