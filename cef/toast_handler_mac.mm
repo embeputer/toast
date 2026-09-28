@@ -88,8 +88,9 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
     content.layer.cornerRadius = 18.0;
     content.layer.masksToBounds = YES;
     @try {
-      // Tinted -> liquid: fill fades out as the level rises, and the top
-      // end flips NSGlassEffectView to its clear (fully liquid) style.
+      // Tinted -> liquid: tintColor fades out as the level rises. Style
+      // stays `clear` at every level — on macOS 27 `regular` renders as
+      // a heavy frosted white instead of refracting glass.
       const CGFloat tint = (100.0 - level) / 100.0 * 0.45;
       if ([g_glass_view respondsToSelector:@selector(setTintColor:)]) {
         [g_glass_view setValue:[NSColor colorWithWhite:1.0 alpha:tint]
@@ -97,7 +98,7 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
       }
       if ([g_glass_view respondsToSelector:@selector(setStyle:)]) {
         // NSGlassEffectViewStyle: 0 regular (tinted), 1 clear (liquid).
-        [g_glass_view setValue:@(level >= 80 ? 1 : 0) forKey:@"style"];
+        [g_glass_view setValue:@1 forKey:@"style"];
       }
       if ([g_glass_view isKindOfClass:[NSVisualEffectView class]]) {
         [(NSVisualEffectView*)g_glass_view
@@ -106,6 +107,14 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
     } @catch (NSException* e) {
       g_glass_backend = "NSGlassEffectView (config failed)";
       NSLog(@"toast: glass config threw: %@", e);
+    }
+    // Re-apply shortly — on some macOS versions the first pass lands
+    // before the window server honors the transparent flags, leaving a
+    // one-shot opaque window. Idempotent, so a second pass is cheap.
+    if (retries_left > 38) {
+      CefPostDelayedTask(TID_UI,
+          base::BindOnce(&PlatformSetGlass, any_browser, level, 0),
+          1200);
     }
   } else {
     // Plain toast: opaque window with a solid border edge around the
