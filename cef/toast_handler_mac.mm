@@ -20,17 +20,18 @@ NSWindow* GetNSWindowForBrowser(CefRefPtr<CefBrowser> browser) {
 }
 
 NSView* g_glass_view = nil;
+NSView* g_glass_tint = nil;  // white wash layered over the blur = "tint"
 const char* g_glass_backend = "pending";  // diagnostic for toast://settings
 
 }  // namespace
 
 namespace toast {
 
-// Liquid-glass window: Apple's NSGlassEffectView pinned behind everything
-// (NSVisualEffectView fallback pre-26), window non-opaque with rounded
-// corners so the glass frame shows around the inset page content.
-// level 1-100 maps tinted -> liquid: low adds a heavier tintColor fill,
-// 100 leaves the glass clear.
+// Simulated "liquid glass" window: a real behind-window vibrancy blur
+// (NSVisualEffectView) pinned behind everything, with a white tint wash
+// layered on top. The window is non-opaque with rounded corners so the
+// glass border shows around the inset page content. level 1-100 maps
+// tinted -> liquid: low adds a heavier wash, 100 leaves the blur clear.
 void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
                       int level,
                       int retries_left) {
@@ -52,36 +53,21 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
   NSView* content = win.contentView;
   if (level > 0) {
     if (!g_glass_view) {
-      Class glassCls = NSClassFromString(@"NSGlassEffectView");
-      NSView* glass = nil;
-      if (glassCls) {
-        glass = [[glassCls alloc] initWithFrame:content.bounds];
-      }
-      if (glass) {
-        g_glass_backend = "NSGlassEffectView";
-        @try {
-          // Documented pattern: the glass embeds a contentView. On macOS
-          // 27 an empty NSGlassEffectView draws nothing, so give it a
-          // transparent content view spanning its bounds.
-          NSView* embedded =
-              [[NSView alloc] initWithFrame:glass.bounds];
-          embedded.autoresizingMask =
-              NSViewWidthSizable | NSViewHeightSizable;
-          [glass setValue:embedded forKey:@"contentView"];
-        } @catch (NSException* e) {
-          NSLog(@"toast: glass contentView embed failed: %@", e);
-        }
-      } else {
-        NSVisualEffectView* vev =
-            [[NSVisualEffectView alloc] initWithFrame:content.bounds];
-        vev.material = NSVisualEffectMaterialUnderWindowBackground;
-        vev.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-        vev.state = NSVisualEffectStateActive;
-        glass = vev;
-        g_glass_backend = "NSVisualEffectView (fallback)";
-      }
-      glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-      g_glass_view = glass;
+      NSVisualEffectView* vev =
+          [[NSVisualEffectView alloc] initWithFrame:content.bounds];
+      vev.material = NSVisualEffectMaterialUnderWindowBackground;
+      vev.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+      vev.state = NSVisualEffectStateActive;
+      vev.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      // Tint wash on top of the blur — this is what sells "tinted
+      // glass" vs "liquid glass" as the level slides.
+      NSView* tint = [[NSView alloc] initWithFrame:vev.bounds];
+      tint.wantsLayer = YES;
+      tint.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      [vev addSubview:tint];
+      g_glass_view = vev;
+      g_glass_tint = tint;
+      g_glass_backend = "NSVisualEffectView (tinted glass)";
       NSLog(@"toast: glass backing = %s", g_glass_backend);
     }
     if (g_glass_view.superview != content) {
@@ -91,35 +77,17 @@ void PlatformSetGlass(CefRefPtr<CefBrowser> any_browser,
                relativeTo:nil];
     }
     g_glass_view.hidden = NO;
-    // Transparent window FIRST — if any of the glass tuning below throws
-    // on a newer macOS, the border must still not fall back to opaque
-    // white.
+    // Transparent window so the glass border shows through.
     win.opaque = NO;
     win.backgroundColor = [NSColor clearColor];
     content.wantsLayer = YES;
     content.layer.cornerRadius = 18.0;
     content.layer.masksToBounds = YES;
-    @try {
-      // Tinted -> liquid: tintColor fades out as the level rises. Style
-      // stays `clear` at every level — on macOS 27 `regular` renders as
-      // a heavy frosted white instead of refracting glass.
-      const CGFloat tint = (100.0 - level) / 100.0 * 0.45;
-      if ([g_glass_view respondsToSelector:@selector(setTintColor:)]) {
-        [g_glass_view setValue:[NSColor colorWithWhite:1.0 alpha:tint]
-                        forKey:@"tintColor"];
-      }
-      if ([g_glass_view respondsToSelector:@selector(setStyle:)]) {
-        // NSGlassEffectViewStyle: 0 regular (tinted), 1 clear (liquid).
-        [g_glass_view setValue:@1 forKey:@"style"];
-      }
-      if ([g_glass_view isKindOfClass:[NSVisualEffectView class]]) {
-        [(NSVisualEffectView*)g_glass_view
-            setAlphaValue:0.45 + 0.55 * (level / 100.0)];
-      }
-    } @catch (NSException* e) {
-      g_glass_backend = "NSGlassEffectView (config failed)";
-      NSLog(@"toast: glass config threw: %@", e);
-    }
+    // level 1 -> heavy frosted wash; 100 -> nearly clear blur.
+    const CGFloat wash =
+        0.05 + (100.0 - level) / 100.0 * 0.45;  // 0.05 .. 0.50
+    g_glass_tint.layer.backgroundColor =
+        [[NSColor colorWithWhite:1.0 alpha:wash] CGColor];
     // Re-apply shortly — on some macOS versions the first pass lands
     // before the window server honors the transparent flags, leaving a
     // one-shot opaque window. Idempotent, so a second pass is cheap.
