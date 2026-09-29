@@ -7,9 +7,11 @@
 #   1. stamps kVersion in cef/toast_updater.mm
 #   2. builds via cef/build.sh (CEF_DISTRO env or ~/cef/distro)
 #   3. packages /tmp/toast.dmg (icon-view installer with Applications link)
-#   4. copies the dmg into ~/toast-feed/ and writes latest.json there
+#   4. uploads the dmg to catbox and writes latest.json into ~/toast-feed/
 # After it runs: `deploy frontend ~/toast-feed` republishes the feed so
 # installed toasts pick the release up on their next launch check.
+# ALWAYS bump the version — two different builds must never share one,
+# or the updater can't tell them apart.
 set -e
 
 VER="$1"
@@ -61,17 +63,25 @@ end tell
 OSA
 sync
 hdiutil detach /Volumes/toast -quiet || hdiutil detach /Volumes/toast -force
-hdiutil convert /tmp/toast-rw.dmg -format UDZO -o "$DMG" -ov
+hdiutil convert /tmp/toast-rw.dmg -format UDBZ -o "$DMG" -ov
 rm -f /tmp/toast-rw.dmg
 rm -rf /tmp/toast-stage
 
-# 4. feed: dmg + latest.json (browser_download_url filled by deploy step —
-#    the updater reads it verbatim, so keep the feed host's absolute URL here)
+# 4. publish: dmg -> catbox (devinapps deploy can't carry ~130MB),
+#    latest.json -> feed dir pointing at the hosted dmg
+DMG_URL="$(curl -s --max-time 600 -F 'reqtype=fileupload' \
+  -F "fileToUpload=@$DMG" https://catbox.moe/user/api.php)"
+case "$DMG_URL" in
+  https://files.catbox.moe/*) ;;
+  *) echo "catbox upload failed: $DMG_URL"; exit 1 ;;
+esac
+
 mkdir -p "$FEED"
-cp "$DMG" "$FEED/toast.dmg"
+cat > "$FEED/latest.json" <<JSON
+{"tag_name":"v$VER","assets":[{"browser_download_url":"$DMG_URL","name":"toast.dmg"}]}
+JSON
 
 echo
 echo "built toast $VER -> $DMG"
-echo "staged feed at $FEED (toast.dmg + latest.json)"
-echo "next: write latest.json browser_download_url to the feed's toast.dmg URL,"
-echo "then redeploy the feed."
+echo "dmg hosted at $DMG_URL"
+echo "wrote $FEED/latest.json — redeploy the feed to publish."

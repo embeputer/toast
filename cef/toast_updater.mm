@@ -22,7 +22,7 @@
 
 namespace {
 
-const char* kVersion = "0.2.0";
+const char* kVersion = "0.2.1";
 const char* kLatestRelease =
     "https://toast-feed-yzbmoxbb.devinapps.com/latest.json";
 const char* kDmgPath = "/tmp/toast-update.dmg";
